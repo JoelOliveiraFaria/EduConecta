@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Defs_Proc_AnoLetivo" targetNamespace="http://educonecta.pt/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.31.0">
+  <bpmn:collaboration id="Col_Proc_AnoLetivo">
+    <bpmn:participant id="Part_Proc_AnoLetivo" name="EduConecta - Ano letivo e inscrições" processRef="Proc_AnoLetivo" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_AnoLetivo" name="Configuração do ano letivo e inscrição de alunos" isExecutable="false">
+    <bpmn:laneSet id="LS_Proc_AnoLetivo">
+      <bpmn:lane id="L3_EE" name="Encarregado de Educação">
+        <bpmn:flowNodeRef>e_consI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fimEE</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L3_SIS" name="Sistema EduConecta">
+        <bpmn:flowNodeRef>s_guard</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_enc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_criaEE</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_conv</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_mE</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_assoc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p_split</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_notif</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L3_ADM" name="Administrador">
+        <bpmn:flowNodeRef>s3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_ano</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_salas</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_prof</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_loopA</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_selAl</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_exist</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_criaAl</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_mA</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_insc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_mais</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fimA</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s3" name="Início do ano letivo">
+      <bpmn:outgoing>Proc_AnoLetivo_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="a_ano" name="Criar ano letivo">
+      <bpmn:incoming>Proc_AnoLetivo_f1</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a_salas" name="Criar salas e turmas">
+      <bpmn:incoming>Proc_AnoLetivo_f2</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a_prof" name="Associar docentes, educadores e auxiliares">
+      <bpmn:incoming>Proc_AnoLetivo_f3</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_loopA" name="">
+      <bpmn:incoming>Proc_AnoLetivo_f4</bpmn:incoming>
+      <bpmn:incoming>Proc_AnoLetivo_f23</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_selAl" name="Selecionar ou introduzir aluno">
+      <bpmn:incoming>Proc_AnoLetivo_f5</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_exist" name="Aluno já registado?">
+      <bpmn:incoming>Proc_AnoLetivo_f6</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f7</bpmn:outgoing>
+      <bpmn:outgoing>Proc_AnoLetivo_f8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_criaAl" name="Criar registo do aluno">
+      <bpmn:incoming>Proc_AnoLetivo_f7</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_mA" name="">
+      <bpmn:incoming>Proc_AnoLetivo_f8</bpmn:incoming>
+      <bpmn:incoming>Proc_AnoLetivo_f9</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f10</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_insc" name="Inscrever aluno na sala ou turma">
+      <bpmn:incoming>Proc_AnoLetivo_f10</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f11</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="s_guard" name="Guardar inscrição e histórico">
+      <bpmn:incoming>Proc_AnoLetivo_f11</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_enc" name="Encarregado já tem conta?">
+      <bpmn:incoming>Proc_AnoLetivo_f12</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f13</bpmn:outgoing>
+      <bpmn:outgoing>Proc_AnoLetivo_f14</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="s_criaEE" name="Criar conta com palavra-passe temporária">
+      <bpmn:incoming>Proc_AnoLetivo_f13</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f15</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="s_conv" name="Enviar credenciais por email">
+      <bpmn:incoming>Proc_AnoLetivo_f15</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f16</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="g_mE" name="">
+      <bpmn:incoming>Proc_AnoLetivo_f14</bpmn:incoming>
+      <bpmn:incoming>Proc_AnoLetivo_f16</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f17</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="s_assoc" name="Associar encarregado ao educando">
+      <bpmn:incoming>Proc_AnoLetivo_f17</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f18</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="p_split" name="">
+      <bpmn:incoming>Proc_AnoLetivo_f18</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f19</bpmn:outgoing>
+      <bpmn:outgoing>Proc_AnoLetivo_f22</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sendTask id="s_notif" name="Notificar encarregado da inscrição">
+      <bpmn:incoming>Proc_AnoLetivo_f19</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f20</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="e_consI" name="Consultar inscrição do educando">
+      <bpmn:incoming>Proc_AnoLetivo_f20</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f21</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e_fimEE" name="Encarregado informado">
+      <bpmn:incoming>Proc_AnoLetivo_f21</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="g_mais" name="Mais alunos a inscrever?">
+      <bpmn:incoming>Proc_AnoLetivo_f22</bpmn:incoming>
+      <bpmn:outgoing>Proc_AnoLetivo_f23</bpmn:outgoing>
+      <bpmn:outgoing>Proc_AnoLetivo_f24</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="e_fimA" name="Ano letivo configurado">
+      <bpmn:incoming>Proc_AnoLetivo_f24</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f1" name="" sourceRef="s3" targetRef="a_ano" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f2" name="" sourceRef="a_ano" targetRef="a_salas" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f3" name="" sourceRef="a_salas" targetRef="a_prof" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f4" name="" sourceRef="a_prof" targetRef="g_loopA" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f23" name="Sim" sourceRef="g_mais" targetRef="g_loopA">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${maisAlunos == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f5" name="" sourceRef="g_loopA" targetRef="a_selAl" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f6" name="" sourceRef="a_selAl" targetRef="g_exist" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f7" name="Não" sourceRef="g_exist" targetRef="a_criaAl">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${alunoExiste == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f8" name="Sim" sourceRef="g_exist" targetRef="g_mA">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${alunoExiste == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f9" name="" sourceRef="a_criaAl" targetRef="g_mA" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f10" name="" sourceRef="g_mA" targetRef="a_insc" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f11" name="" sourceRef="a_insc" targetRef="s_guard" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f12" name="" sourceRef="s_guard" targetRef="g_enc" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f13" name="Não" sourceRef="g_enc" targetRef="s_criaEE">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${encarregadoTemConta == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f14" name="Sim" sourceRef="g_enc" targetRef="g_mE">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${encarregadoTemConta == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f15" name="" sourceRef="s_criaEE" targetRef="s_conv" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f16" name="" sourceRef="s_conv" targetRef="g_mE" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f17" name="" sourceRef="g_mE" targetRef="s_assoc" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f18" name="" sourceRef="s_assoc" targetRef="p_split" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f19" name="" sourceRef="p_split" targetRef="s_notif" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f22" name="" sourceRef="p_split" targetRef="g_mais" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f20" name="" sourceRef="s_notif" targetRef="e_consI" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f21" name="" sourceRef="e_consI" targetRef="e_fimEE" />
+    <bpmn:sequenceFlow id="Proc_AnoLetivo_f24" name="Não" sourceRef="g_mais" targetRef="e_fimA">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${maisAlunos == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dia_Proc_AnoLetivo">
+    <bpmndi:BPMNPlane id="Pl_Proc_AnoLetivo" bpmnElement="Col_Proc_AnoLetivo">
+      <bpmndi:BPMNShape id="Part_Proc_AnoLetivo_di" bpmnElement="Part_Proc_AnoLetivo" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="3100" height="600" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L3_EE_di" bpmnElement="L3_EE" isHorizontal="true">
+        <dc:Bounds x="190" y="480" width="3070" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L3_SIS_di" bpmnElement="L3_SIS" isHorizontal="true">
+        <dc:Bounds x="190" y="280" width="3070" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L3_ADM_di" bpmnElement="L3_ADM" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="3070" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s3_di" bpmnElement="s3">
+        <dc:Bounds x="272" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="259" y="198" width="63" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_ano_di" bpmnElement="a_ano">
+        <dc:Bounds x="380" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_salas_di" bpmnElement="a_salas">
+        <dc:Bounds x="530" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_prof_di" bpmnElement="a_prof">
+        <dc:Bounds x="680" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_loopA_di" bpmnElement="g_loopA" isMarkerVisible="true">
+        <dc:Bounds x="865" y="155" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_selAl_di" bpmnElement="a_selAl">
+        <dc:Bounds x="980" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_exist_di" bpmnElement="g_exist" isMarkerVisible="true">
+        <dc:Bounds x="1165" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1164" y="126" width="52" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_criaAl_di" bpmnElement="a_criaAl">
+        <dc:Bounds x="1280" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_mA_di" bpmnElement="g_mA" isMarkerVisible="true">
+        <dc:Bounds x="1465" y="155" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_insc_di" bpmnElement="a_insc">
+        <dc:Bounds x="1580" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_guard_di" bpmnElement="s_guard">
+        <dc:Bounds x="1730" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_enc_di" bpmnElement="g_enc" isMarkerVisible="true">
+        <dc:Bounds x="1915" y="355" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1903" y="316" width="75" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_criaEE_di" bpmnElement="s_criaEE">
+        <dc:Bounds x="2030" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_conv_di" bpmnElement="s_conv">
+        <dc:Bounds x="2180" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_mE_di" bpmnElement="g_mE" isMarkerVisible="true">
+        <dc:Bounds x="2365" y="355" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_assoc_di" bpmnElement="s_assoc">
+        <dc:Bounds x="2480" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="p_split_di" bpmnElement="p_split">
+        <dc:Bounds x="2665" y="355" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_notif_di" bpmnElement="s_notif">
+        <dc:Bounds x="2780" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_consI_di" bpmnElement="e_consI">
+        <dc:Bounds x="2930" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fimEE_di" bpmnElement="e_fimEE">
+        <dc:Bounds x="3122" y="562" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3109" y="598" width="63" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_mais_di" bpmnElement="g_mais" isMarkerVisible="true">
+        <dc:Bounds x="2815" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2806" y="205" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fimA_di" bpmnElement="e_fimA">
+        <dc:Bounds x="2972" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2961" y="198" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f1_di" bpmnElement="Proc_AnoLetivo_f1">
+        <di:waypoint x="308" y="180" />
+        <di:waypoint x="380" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f2_di" bpmnElement="Proc_AnoLetivo_f2">
+        <di:waypoint x="500" y="180" />
+        <di:waypoint x="530" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f3_di" bpmnElement="Proc_AnoLetivo_f3">
+        <di:waypoint x="650" y="180" />
+        <di:waypoint x="680" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f4_di" bpmnElement="Proc_AnoLetivo_f4">
+        <di:waypoint x="800" y="180" />
+        <di:waypoint x="865" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f5_di" bpmnElement="Proc_AnoLetivo_f5">
+        <di:waypoint x="915" y="180" />
+        <di:waypoint x="980" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f6_di" bpmnElement="Proc_AnoLetivo_f6">
+        <di:waypoint x="1100" y="180" />
+        <di:waypoint x="1165" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f7_di" bpmnElement="Proc_AnoLetivo_f7">
+        <di:waypoint x="1215" y="180" />
+        <di:waypoint x="1280" y="180" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1237" y="155" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f8_di" bpmnElement="Proc_AnoLetivo_f8">
+        <di:waypoint x="1190" y="205" />
+        <di:waypoint x="1190" y="252" />
+        <di:waypoint x="1490" y="252" />
+        <di:waypoint x="1490" y="205" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1331" y="227" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f9_di" bpmnElement="Proc_AnoLetivo_f9">
+        <di:waypoint x="1400" y="180" />
+        <di:waypoint x="1465" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f10_di" bpmnElement="Proc_AnoLetivo_f10">
+        <di:waypoint x="1515" y="180" />
+        <di:waypoint x="1580" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f11_di" bpmnElement="Proc_AnoLetivo_f11">
+        <di:waypoint x="1640" y="220" />
+        <di:waypoint x="1640" y="380" />
+        <di:waypoint x="1730" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f12_di" bpmnElement="Proc_AnoLetivo_f12">
+        <di:waypoint x="1850" y="380" />
+        <di:waypoint x="1915" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f13_di" bpmnElement="Proc_AnoLetivo_f13">
+        <di:waypoint x="1965" y="380" />
+        <di:waypoint x="2030" y="380" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1987" y="355" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f14_di" bpmnElement="Proc_AnoLetivo_f14">
+        <di:waypoint x="1940" y="405" />
+        <di:waypoint x="1940" y="452" />
+        <di:waypoint x="2390" y="452" />
+        <di:waypoint x="2390" y="405" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2156" y="427" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f15_di" bpmnElement="Proc_AnoLetivo_f15">
+        <di:waypoint x="2150" y="380" />
+        <di:waypoint x="2180" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f16_di" bpmnElement="Proc_AnoLetivo_f16">
+        <di:waypoint x="2300" y="380" />
+        <di:waypoint x="2365" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f17_di" bpmnElement="Proc_AnoLetivo_f17">
+        <di:waypoint x="2415" y="380" />
+        <di:waypoint x="2480" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f18_di" bpmnElement="Proc_AnoLetivo_f18">
+        <di:waypoint x="2600" y="380" />
+        <di:waypoint x="2665" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f19_di" bpmnElement="Proc_AnoLetivo_f19">
+        <di:waypoint x="2715" y="380" />
+        <di:waypoint x="2780" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f20_di" bpmnElement="Proc_AnoLetivo_f20">
+        <di:waypoint x="2840" y="420" />
+        <di:waypoint x="2840" y="580" />
+        <di:waypoint x="2930" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f21_di" bpmnElement="Proc_AnoLetivo_f21">
+        <di:waypoint x="3050" y="580" />
+        <di:waypoint x="3122" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f22_di" bpmnElement="Proc_AnoLetivo_f22">
+        <di:waypoint x="2690" y="355" />
+        <di:waypoint x="2690" y="180" />
+        <di:waypoint x="2815" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f23_di" bpmnElement="Proc_AnoLetivo_f23">
+        <di:waypoint x="2840" y="155" />
+        <di:waypoint x="2840" y="102" />
+        <di:waypoint x="890" y="102" />
+        <di:waypoint x="890" y="155" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1856" y="77" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_AnoLetivo_f24_di" bpmnElement="Proc_AnoLetivo_f24">
+        <di:waypoint x="2865" y="180" />
+        <di:waypoint x="2972" y="180" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2908" y="155" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

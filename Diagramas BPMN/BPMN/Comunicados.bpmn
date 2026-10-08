@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Defs_Proc_Comunicados" targetNamespace="http://educonecta.pt/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.31.0">
+  <bpmn:collaboration id="Col_Proc_Comunicados">
+    <bpmn:participant id="Part_Proc_Comunicados" name="EduConecta - Comunicados" processRef="Proc_Comunicados" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Comunicados" name="Publicação de comunicados" isExecutable="false">
+    <bpmn:laneSet id="LS_Proc_Comunicados">
+      <bpmn:lane id="L5_EE" name="Encarregado de Educação">
+        <bpmn:flowNodeRef>e_ler</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_lem</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L5_SIS" name="Sistema EduConecta">
+        <bpmn:flowNodeRef>g_conf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_lem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_lem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_regC</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_m5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fim5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_pub</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_not</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L5_AUT" name="Docente / Educador">
+        <bpmn:flowNodeRef>s5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_red</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_dest</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s5" name="Necessidade de comunicar">
+      <bpmn:outgoing>Proc_Comunicados_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="a_red" name="Redigir comunicado">
+      <bpmn:incoming>Proc_Comunicados_f1</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_conf" name="Requer confirmação de leitura?">
+      <bpmn:incoming>Proc_Comunicados_f11</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f12</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Comunicados_f13</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="e_ler" name="Confirmar leitura">
+      <bpmn:incoming>Proc_Comunicados_f12</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f16</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="s_lem" name="Enviar lembrete">
+      <bpmn:incoming>Proc_Comunicados_f14</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f15</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="e_lem" name="Lembrete enviado">
+      <bpmn:incoming>Proc_Comunicados_f15</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="s_regC" name="Registar confirmação de leitura">
+      <bpmn:incoming>Proc_Comunicados_f16</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f17</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_m5" name="">
+      <bpmn:incoming>Proc_Comunicados_f13</bpmn:incoming>
+      <bpmn:incoming>Proc_Comunicados_f17</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f18</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="e_fim5" name="Comunicado concluído">
+      <bpmn:incoming>Proc_Comunicados_f18</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="s_pub" name="Publicar comunicado">
+      <bpmn:incoming>Flow_1x1rwm4</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="s_not" name="Notificar destinatários (email e plataforma)">
+      <bpmn:incoming>Proc_Comunicados_f10</bpmn:incoming>
+      <bpmn:outgoing>Proc_Comunicados_f11</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="a_dest" name="Selecionar destinatários (sala, turma ou grupo)">
+      <bpmn:incoming>Proc_Comunicados_f2</bpmn:incoming>
+      <bpmn:outgoing>Flow_1x1rwm4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="b_lem" name="A cada 48h sem confirmação" cancelActivity="false" attachedToRef="e_ler">
+      <bpmn:outgoing>Proc_Comunicados_f14</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="b_lem_td">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R3/PT48H</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Proc_Comunicados_f1" name="" sourceRef="s5" targetRef="a_red" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f2" name="" sourceRef="a_red" targetRef="a_dest" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f11" name="" sourceRef="s_not" targetRef="g_conf" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f12" name="Sim" sourceRef="g_conf" targetRef="e_ler">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${requerConfirmacao == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Comunicados_f13" name="Não" sourceRef="g_conf" targetRef="g_m5">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${requerConfirmacao == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Comunicados_f16" name="" sourceRef="e_ler" targetRef="s_regC" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f14" name="" sourceRef="b_lem" targetRef="s_lem" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f15" name="" sourceRef="s_lem" targetRef="e_lem" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f17" name="" sourceRef="s_regC" targetRef="g_m5" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f18" name="" sourceRef="g_m5" targetRef="e_fim5" />
+    <bpmn:sequenceFlow id="Flow_1x1rwm4" sourceRef="a_dest" targetRef="s_pub" />
+    <bpmn:sequenceFlow id="Proc_Comunicados_f10" name="" sourceRef="s_pub" targetRef="s_not" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dia_Proc_Comunicados">
+    <bpmndi:BPMNPlane id="Pl_Proc_Comunicados" bpmnElement="Col_Proc_Comunicados">
+      <bpmndi:BPMNShape id="Part_Proc_Comunicados_di" bpmnElement="Part_Proc_Comunicados" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="2650" height="800" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L5_EE_di" bpmnElement="L5_EE" isHorizontal="true">
+        <dc:Bounds x="190" y="680" width="2620" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L5_SIS_di" bpmnElement="L5_SIS" isHorizontal="true">
+        <dc:Bounds x="190" y="380" width="2620" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L5_AUT_di" bpmnElement="L5_AUT" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="2620" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s5_di" bpmnElement="s5">
+        <dc:Bounds x="272" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="251" y="198" width="79" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_red_di" bpmnElement="a_red">
+        <dc:Bounds x="380" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_conf_di" bpmnElement="g_conf" isMarkerVisible="true">
+        <dc:Bounds x="1615" y="555" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1675" y="560" width="76" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ler_di" bpmnElement="e_ler">
+        <dc:Bounds x="1730" y="740" width="120" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_lem_di" bpmnElement="s_lem">
+        <dc:Bounds x="1880" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_lem_di" bpmnElement="e_lem">
+        <dc:Bounds x="2072" y="562" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2046" y="598" width="89" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_regC_di" bpmnElement="s_regC">
+        <dc:Bounds x="2180" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_m5_di" bpmnElement="g_m5" isMarkerVisible="true">
+        <dc:Bounds x="2365" y="555" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fim5_di" bpmnElement="e_fim5">
+        <dc:Bounds x="2672" y="562" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2659" y="598" width="62" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_pub_di" bpmnElement="s_pub">
+        <dc:Bounds x="920" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_not_di" bpmnElement="s_not">
+        <dc:Bounds x="1280" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_dest_di" bpmnElement="a_dest">
+        <dc:Bounds x="650" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_lem_di" bpmnElement="b_lem">
+        <dc:Bounds x="1800" y="722" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1830" y="706" width="80" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f1_di" bpmnElement="Proc_Comunicados_f1">
+        <di:waypoint x="308" y="180" />
+        <di:waypoint x="380" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f2_di" bpmnElement="Proc_Comunicados_f2">
+        <di:waypoint x="500" y="180" />
+        <di:waypoint x="650" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f10_di" bpmnElement="Proc_Comunicados_f10">
+        <di:waypoint x="1040" y="580" />
+        <di:waypoint x="1280" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f11_di" bpmnElement="Proc_Comunicados_f11">
+        <di:waypoint x="1400" y="580" />
+        <di:waypoint x="1615" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f12_di" bpmnElement="Proc_Comunicados_f12">
+        <di:waypoint x="1640" y="605" />
+        <di:waypoint x="1640" y="780" />
+        <di:waypoint x="1730" y="780" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1646" y="683" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f13_di" bpmnElement="Proc_Comunicados_f13">
+        <di:waypoint x="1640" y="555" />
+        <di:waypoint x="1640" y="508" />
+        <di:waypoint x="2390" y="508" />
+        <di:waypoint x="2390" y="555" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2005" y="483" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f14_di" bpmnElement="Proc_Comunicados_f14">
+        <di:waypoint x="1818" y="722" />
+        <di:waypoint x="1818" y="580" />
+        <di:waypoint x="1880" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f15_di" bpmnElement="Proc_Comunicados_f15">
+        <di:waypoint x="2000" y="580" />
+        <di:waypoint x="2072" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f16_di" bpmnElement="Proc_Comunicados_f16">
+        <di:waypoint x="1850" y="780" />
+        <di:waypoint x="2240" y="780" />
+        <di:waypoint x="2240" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f17_di" bpmnElement="Proc_Comunicados_f17">
+        <di:waypoint x="2300" y="580" />
+        <di:waypoint x="2365" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Comunicados_f18_di" bpmnElement="Proc_Comunicados_f18">
+        <di:waypoint x="2415" y="580" />
+        <di:waypoint x="2672" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1x1rwm4_di" bpmnElement="Flow_1x1rwm4">
+        <di:waypoint x="770" y="180" />
+        <di:waypoint x="980" y="180" />
+        <di:waypoint x="980" y="540" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

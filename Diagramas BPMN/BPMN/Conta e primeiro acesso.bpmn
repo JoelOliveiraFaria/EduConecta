@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Defs_Proc_Conta" targetNamespace="http://educonecta.pt/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.31.0">
+  <bpmn:collaboration id="Col_Proc_Conta">
+    <bpmn:participant id="Part_Proc_Conta" name="EduConecta - Conta e primeiro acesso" processRef="Proc_Conta" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Conta" name="Criação de conta do encarregado e primeiro acesso" isExecutable="false">
+    <bpmn:laneSet id="LS_Proc_Conta">
+      <bpmn:lane id="L4_EE" name="Encarregado de Educação">
+        <bpmn:flowNodeRef>u_login</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>u_npw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>u_area</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fim4</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L4_MAIL" name="Serviço de Email (externo)">
+        <bpmn:flowNodeRef>m_env</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L4_SIS" name="Sistema EduConecta">
+        <bpmn:flowNodeRef>s_valD</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_val</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_auth</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_cred</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_temp</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_valPw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_pw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_upd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_mAcc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_gera</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_conta</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L4_ADM" name="Administrador">
+        <bpmn:flowNodeRef>s4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_dados</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_assoc</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s4" name="Novo encarregado de educação">
+      <bpmn:outgoing>Proc_Conta_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="a_dados" name="Introduzir dados do encarregado">
+      <bpmn:incoming>Proc_Conta_f1</bpmn:incoming>
+      <bpmn:incoming>Proc_Conta_f6</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a_assoc" name="Associar ao educando">
+      <bpmn:incoming>Proc_Conta_f2</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="s_valD" name="Validar dados (email único, campos obrigatórios)">
+      <bpmn:incoming>Proc_Conta_f3</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_val" name="Dados válidos?">
+      <bpmn:incoming>Proc_Conta_f4</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f5</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Conta_f6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="m_env" name="Enviar email com palavra-passe temporária">
+      <bpmn:incoming>Proc_Conta_f8</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f11</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="u_login" name="Iniciar sessão com email e palavra-passe">
+      <bpmn:incoming>Proc_Conta_f11</bpmn:incoming>
+      <bpmn:incoming>Proc_Conta_f15</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f12</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="s_auth" name="Autenticar credenciais">
+      <bpmn:incoming>Proc_Conta_f12</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f13</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_cred" name="Credenciais válidas?">
+      <bpmn:incoming>Proc_Conta_f13</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f14</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Conta_f15</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="g_temp" name="Primeiro login?">
+      <bpmn:incoming>Proc_Conta_f14</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f16</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Conta_f17</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="u_npw" name="Definir nova palavra-passe (obrigatório)">
+      <bpmn:incoming>Proc_Conta_f16</bpmn:incoming>
+      <bpmn:incoming>Proc_Conta_f21</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f18</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="s_valPw" name="Validar nova palavra-passe">
+      <bpmn:incoming>Proc_Conta_f18</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f19</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_pw" name="Cumpre os requisitos?">
+      <bpmn:incoming>Proc_Conta_f19</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f20</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Conta_f21</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="s_upd" name="Guardar nova palavra-passe e remover obrigação">
+      <bpmn:incoming>Proc_Conta_f20</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f22</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_mAcc" name="">
+      <bpmn:incoming>Proc_Conta_f17</bpmn:incoming>
+      <bpmn:incoming>Proc_Conta_f22</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f23</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="u_area" name="Aceder à área do encarregado">
+      <bpmn:incoming>Proc_Conta_f23</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f25</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e_fim4" name="Sessão iniciada">
+      <bpmn:incoming>Proc_Conta_f25</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="s_gera" name="Gerar palavra-passe aleatória temporária">
+      <bpmn:incoming>Proc_Conta_f7</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f8</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="s_conta" name="Criar conta com perfil Encarregado">
+      <bpmn:incoming>Proc_Conta_f5</bpmn:incoming>
+      <bpmn:outgoing>Proc_Conta_f7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Proc_Conta_f1" name="" sourceRef="s4" targetRef="a_dados" />
+    <bpmn:sequenceFlow id="Proc_Conta_f6" name="Não" sourceRef="g_val" targetRef="a_dados">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${dadosValidos == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f2" name="" sourceRef="a_dados" targetRef="a_assoc" />
+    <bpmn:sequenceFlow id="Proc_Conta_f3" name="" sourceRef="a_assoc" targetRef="s_valD" />
+    <bpmn:sequenceFlow id="Proc_Conta_f4" name="" sourceRef="s_valD" targetRef="g_val" />
+    <bpmn:sequenceFlow id="Proc_Conta_f5" name="Sim" sourceRef="g_val" targetRef="s_conta">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${dadosValidos == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f8" name="" sourceRef="s_gera" targetRef="m_env" />
+    <bpmn:sequenceFlow id="Proc_Conta_f11" name="" sourceRef="m_env" targetRef="u_login" />
+    <bpmn:sequenceFlow id="Proc_Conta_f15" name="Não" sourceRef="g_cred" targetRef="u_login">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${credenciaisValidas == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f12" name="" sourceRef="u_login" targetRef="s_auth" />
+    <bpmn:sequenceFlow id="Proc_Conta_f13" name="" sourceRef="s_auth" targetRef="g_cred" />
+    <bpmn:sequenceFlow id="Proc_Conta_f14" name="Sim" sourceRef="g_cred" targetRef="g_temp">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${credenciaisValidas == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f16" name="Sim" sourceRef="g_temp" targetRef="u_npw">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${alteracaoObrigatoria == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f17" name="Não" sourceRef="g_temp" targetRef="g_mAcc">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${alteracaoObrigatoria == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f21" name="Não" sourceRef="g_pw" targetRef="u_npw">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${passwordValida == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f18" name="" sourceRef="u_npw" targetRef="s_valPw" />
+    <bpmn:sequenceFlow id="Proc_Conta_f19" name="" sourceRef="s_valPw" targetRef="g_pw" />
+    <bpmn:sequenceFlow id="Proc_Conta_f20" name="Sim" sourceRef="g_pw" targetRef="s_upd">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${passwordValida == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Conta_f22" name="" sourceRef="s_upd" targetRef="g_mAcc" />
+    <bpmn:sequenceFlow id="Proc_Conta_f23" name="" sourceRef="g_mAcc" targetRef="u_area" />
+    <bpmn:sequenceFlow id="Proc_Conta_f25" name="" sourceRef="u_area" targetRef="e_fim4" />
+    <bpmn:sequenceFlow id="Proc_Conta_f7" name="" sourceRef="s_conta" targetRef="s_gera" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dia_Proc_Conta">
+    <bpmndi:BPMNPlane id="Pl_Proc_Conta" bpmnElement="Col_Proc_Conta">
+      <bpmndi:BPMNShape id="Part_Proc_Conta_di" bpmnElement="Part_Proc_Conta" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="3400" height="800" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L4_EE_di" bpmnElement="L4_EE" isHorizontal="true">
+        <dc:Bounds x="190" y="680" width="3370" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L4_MAIL_di" bpmnElement="L4_MAIL" isHorizontal="true">
+        <dc:Bounds x="190" y="480" width="3370" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L4_SIS_di" bpmnElement="L4_SIS" isHorizontal="true">
+        <dc:Bounds x="190" y="280" width="3370" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L4_ADM_di" bpmnElement="L4_ADM" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="3370" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s4_di" bpmnElement="s4">
+        <dc:Bounds x="272" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="251" y="198" width="78" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_dados_di" bpmnElement="a_dados">
+        <dc:Bounds x="380" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_assoc_di" bpmnElement="a_assoc">
+        <dc:Bounds x="530" y="140" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_valD_di" bpmnElement="s_valD">
+        <dc:Bounds x="680" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_val_di" bpmnElement="g_val" isMarkerVisible="true">
+        <dc:Bounds x="865" y="355" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="852" y="333" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="m_env_di" bpmnElement="m_env">
+        <dc:Bounds x="1580" y="540" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="u_login_di" bpmnElement="u_login">
+        <dc:Bounds x="1730" y="740" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_auth_di" bpmnElement="s_auth">
+        <dc:Bounds x="1880" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_cred_di" bpmnElement="g_cred" isMarkerVisible="true">
+        <dc:Bounds x="2065" y="355" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2100" y="405" width="59" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_temp_di" bpmnElement="g_temp" isMarkerVisible="true">
+        <dc:Bounds x="2215" y="355" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2261" y="405" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="u_npw_di" bpmnElement="u_npw">
+        <dc:Bounds x="2330" y="740" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_valPw_di" bpmnElement="s_valPw">
+        <dc:Bounds x="2480" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_pw_di" bpmnElement="g_pw" isMarkerVisible="true">
+        <dc:Bounds x="2665" y="355" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2663" y="405" width="54" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_upd_di" bpmnElement="s_upd">
+        <dc:Bounds x="2780" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_mAcc_di" bpmnElement="g_mAcc" isMarkerVisible="true">
+        <dc:Bounds x="2965" y="355" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="u_area_di" bpmnElement="u_area">
+        <dc:Bounds x="3230" y="740" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fim4_di" bpmnElement="e_fim4">
+        <dc:Bounds x="3422" y="762" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3401" y="798" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gera_di" bpmnElement="s_gera">
+        <dc:Bounds x="1350" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_conta_di" bpmnElement="s_conta">
+        <dc:Bounds x="1090" y="340" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Proc_Conta_f1_di" bpmnElement="Proc_Conta_f1">
+        <di:waypoint x="308" y="180" />
+        <di:waypoint x="380" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f2_di" bpmnElement="Proc_Conta_f2">
+        <di:waypoint x="500" y="180" />
+        <di:waypoint x="530" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f3_di" bpmnElement="Proc_Conta_f3">
+        <di:waypoint x="590" y="220" />
+        <di:waypoint x="590" y="380" />
+        <di:waypoint x="680" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f4_di" bpmnElement="Proc_Conta_f4">
+        <di:waypoint x="800" y="380" />
+        <di:waypoint x="865" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f5_di" bpmnElement="Proc_Conta_f5">
+        <di:waypoint x="915" y="380" />
+        <di:waypoint x="1090" y="380" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="994" y="355" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f6_di" bpmnElement="Proc_Conta_f6">
+        <di:waypoint x="890" y="405" />
+        <di:waypoint x="890" y="452" />
+        <di:waypoint x="440" y="452" />
+        <di:waypoint x="440" y="220" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="655" y="427" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f7_di" bpmnElement="Proc_Conta_f7">
+        <di:waypoint x="1210" y="380" />
+        <di:waypoint x="1350" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f8_di" bpmnElement="Proc_Conta_f8">
+        <di:waypoint x="1410" y="420" />
+        <di:waypoint x="1410" y="580" />
+        <di:waypoint x="1580" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f11_di" bpmnElement="Proc_Conta_f11">
+        <di:waypoint x="1640" y="620" />
+        <di:waypoint x="1640" y="780" />
+        <di:waypoint x="1730" y="780" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f12_di" bpmnElement="Proc_Conta_f12">
+        <di:waypoint x="1790" y="740" />
+        <di:waypoint x="1790" y="380" />
+        <di:waypoint x="1880" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f13_di" bpmnElement="Proc_Conta_f13">
+        <di:waypoint x="2000" y="380" />
+        <di:waypoint x="2065" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f14_di" bpmnElement="Proc_Conta_f14">
+        <di:waypoint x="2115" y="380" />
+        <di:waypoint x="2215" y="380" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2156" y="355" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f15_di" bpmnElement="Proc_Conta_f15">
+        <di:waypoint x="2090" y="405" />
+        <di:waypoint x="2090" y="708" />
+        <di:waypoint x="1820" y="708" />
+        <di:waypoint x="1820" y="740" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1945" y="683" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f16_di" bpmnElement="Proc_Conta_f16">
+        <di:waypoint x="2240" y="405" />
+        <di:waypoint x="2240" y="780" />
+        <di:waypoint x="2330" y="780" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2246" y="583" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f17_di" bpmnElement="Proc_Conta_f17">
+        <di:waypoint x="2240" y="355" />
+        <di:waypoint x="2240" y="308" />
+        <di:waypoint x="2990" y="308" />
+        <di:waypoint x="2990" y="355" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2605" y="283" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f18_di" bpmnElement="Proc_Conta_f18">
+        <di:waypoint x="2390" y="740" />
+        <di:waypoint x="2390" y="380" />
+        <di:waypoint x="2480" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f19_di" bpmnElement="Proc_Conta_f19">
+        <di:waypoint x="2600" y="380" />
+        <di:waypoint x="2665" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f20_di" bpmnElement="Proc_Conta_f20">
+        <di:waypoint x="2715" y="380" />
+        <di:waypoint x="2780" y="380" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2738" y="355" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f21_di" bpmnElement="Proc_Conta_f21">
+        <di:waypoint x="2690" y="405" />
+        <di:waypoint x="2690" y="708" />
+        <di:waypoint x="2420" y="708" />
+        <di:waypoint x="2420" y="740" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2545" y="683" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f22_di" bpmnElement="Proc_Conta_f22">
+        <di:waypoint x="2900" y="380" />
+        <di:waypoint x="2965" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f23_di" bpmnElement="Proc_Conta_f23">
+        <di:waypoint x="3015" y="380" />
+        <di:waypoint x="3140" y="380" />
+        <di:waypoint x="3140" y="780" />
+        <di:waypoint x="3230" y="780" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Conta_f25_di" bpmnElement="Proc_Conta_f25">
+        <di:waypoint x="3350" y="780" />
+        <di:waypoint x="3422" y="780" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

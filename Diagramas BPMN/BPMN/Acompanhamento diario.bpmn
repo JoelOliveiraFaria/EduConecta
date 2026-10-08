@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Defs_Proc_Diario" targetNamespace="http://educonecta.pt/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.31.0">
+  <bpmn:collaboration id="Col_Proc_Diario">
+    <bpmn:participant id="Part_Proc_Diario" name="EduConecta - Acompanhamento diário" processRef="Proc_Diario" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Diario" name="Acompanhamento diário na creche" isExecutable="false">
+    <bpmn:laneSet id="LS_Proc_Diario">
+      <bpmn:lane id="L2_EE" name="Encarregado de Educação">
+        <bpmn:flowNodeRef>e_tc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_cons</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fim2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L2_SIS" name="Sistema EduConecta">
+        <bpmn:flowNodeRef>s_ent</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_alert</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_urg</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_pub</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_res</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L2_EDU" name="Educador">
+        <bpmn:flowNodeRef>ed_av</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_cont</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_m3</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L2_AUX" name="Auxiliar de Ação Educativa">
+        <bpmn:flowNodeRef>s2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_ent</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_loop</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_reg</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_rel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_m2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_fim</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_sai</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s2" name="Criança entregue na creche">
+      <bpmn:outgoing>Proc_Diario_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="a_ent" name="Registar entrada da criança">
+      <bpmn:incoming>Proc_Diario_f1</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="s_ent" name="Notificar entrada ao encarregado">
+      <bpmn:incoming>Proc_Diario_f2</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="g_loop" name="">
+      <bpmn:incoming>Proc_Diario_f3</bpmn:incoming>
+      <bpmn:incoming>Proc_Diario_f16</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_reg" name="Registar refeição, descanso ou higiene">
+      <bpmn:incoming>Proc_Diario_f4</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_rel" name="Situação relevante?">
+      <bpmn:incoming>Proc_Diario_f5</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f6</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Diario_f7</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="s_alert" name="Alertar educador">
+      <bpmn:incoming>Proc_Diario_f6</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f8</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="ed_av" name="Avaliar situação">
+      <bpmn:incoming>Proc_Diario_f8</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_cont" name="Contactar encarregado?">
+      <bpmn:incoming>Proc_Diario_f9</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f10</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Diario_f11</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="s_urg" name="Enviar alerta ao encarregado">
+      <bpmn:incoming>Proc_Diario_f10</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f12</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="e_tc" name="Tomar conhecimento">
+      <bpmn:incoming>Proc_Diario_f12</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f13</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_m3" name="">
+      <bpmn:incoming>Proc_Diario_f11</bpmn:incoming>
+      <bpmn:incoming>Proc_Diario_f13</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f14</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="g_m2" name="">
+      <bpmn:incoming>Proc_Diario_f7</bpmn:incoming>
+      <bpmn:incoming>Proc_Diario_f14</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f15</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="g_fim" name="Fim do dia?">
+      <bpmn:incoming>Proc_Diario_f15</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f16</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Diario_f17</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_sai" name="Registar saída da criança">
+      <bpmn:incoming>Proc_Diario_f17</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f18</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="s_pub" name="Publicar resumo e notificar">
+      <bpmn:incoming>Flow_171jvh4</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f24</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="e_cons" name="Consultar diário do educando">
+      <bpmn:incoming>Proc_Diario_f24</bpmn:incoming>
+      <bpmn:outgoing>Proc_Diario_f25</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e_fim2" name="Dia concluído">
+      <bpmn:incoming>Proc_Diario_f25</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="s_res" name="Compilar resumo diário">
+      <bpmn:incoming>Proc_Diario_f18</bpmn:incoming>
+      <bpmn:outgoing>Flow_171jvh4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Proc_Diario_f1" name="" sourceRef="s2" targetRef="a_ent" />
+    <bpmn:sequenceFlow id="Proc_Diario_f2" name="" sourceRef="a_ent" targetRef="s_ent" />
+    <bpmn:sequenceFlow id="Proc_Diario_f3" name="" sourceRef="s_ent" targetRef="g_loop" />
+    <bpmn:sequenceFlow id="Proc_Diario_f16" name="Não" sourceRef="g_fim" targetRef="g_loop">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fimDoDia == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f4" name="" sourceRef="g_loop" targetRef="a_reg" />
+    <bpmn:sequenceFlow id="Proc_Diario_f5" name="" sourceRef="a_reg" targetRef="g_rel" />
+    <bpmn:sequenceFlow id="Proc_Diario_f6" name="Sim" sourceRef="g_rel" targetRef="s_alert">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${relevante == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f7" name="Não" sourceRef="g_rel" targetRef="g_m2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${relevante == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f8" name="" sourceRef="s_alert" targetRef="ed_av" />
+    <bpmn:sequenceFlow id="Proc_Diario_f9" name="" sourceRef="ed_av" targetRef="g_cont" />
+    <bpmn:sequenceFlow id="Proc_Diario_f10" name="Sim" sourceRef="g_cont" targetRef="s_urg">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${contactar == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f11" name="Não" sourceRef="g_cont" targetRef="g_m3">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${contactar == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f12" name="" sourceRef="s_urg" targetRef="e_tc" />
+    <bpmn:sequenceFlow id="Proc_Diario_f13" name="" sourceRef="e_tc" targetRef="g_m3" />
+    <bpmn:sequenceFlow id="Proc_Diario_f14" name="" sourceRef="g_m3" targetRef="g_m2" />
+    <bpmn:sequenceFlow id="Proc_Diario_f15" name="" sourceRef="g_m2" targetRef="g_fim" />
+    <bpmn:sequenceFlow id="Proc_Diario_f17" name="Sim" sourceRef="g_fim" targetRef="a_sai">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fimDoDia == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Diario_f18" name="" sourceRef="a_sai" targetRef="s_res" />
+    <bpmn:sequenceFlow id="Flow_171jvh4" sourceRef="s_res" targetRef="s_pub" />
+    <bpmn:sequenceFlow id="Proc_Diario_f24" name="" sourceRef="s_pub" targetRef="e_cons" />
+    <bpmn:sequenceFlow id="Proc_Diario_f25" name="" sourceRef="e_cons" targetRef="e_fim2" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dia_Proc_Diario">
+    <bpmndi:BPMNPlane id="Pl_Proc_Diario" bpmnElement="Col_Proc_Diario">
+      <bpmndi:BPMNShape id="Part_Proc_Diario_di" bpmnElement="Part_Proc_Diario" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="3250" height="820" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L2_EE_di" bpmnElement="L2_EE" isHorizontal="true">
+        <dc:Bounds x="190" y="700" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L2_SIS_di" bpmnElement="L2_SIS" isHorizontal="true">
+        <dc:Bounds x="190" y="500" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L2_EDU_di" bpmnElement="L2_EDU" isHorizontal="true">
+        <dc:Bounds x="190" y="300" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L2_AUX_di" bpmnElement="L2_AUX" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="3220" height="220" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s2_di" bpmnElement="s2">
+        <dc:Bounds x="272" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="248" y="218" width="85" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_ent_di" bpmnElement="a_ent">
+        <dc:Bounds x="380" y="160" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_ent_di" bpmnElement="s_ent">
+        <dc:Bounds x="530" y="560" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_loop_di" bpmnElement="g_loop" isMarkerVisible="true">
+        <dc:Bounds x="715" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_reg_di" bpmnElement="a_reg">
+        <dc:Bounds x="830" y="160" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_rel_di" bpmnElement="g_rel" isMarkerVisible="true">
+        <dc:Bounds x="1015" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1014" y="225" width="52" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_alert_di" bpmnElement="s_alert">
+        <dc:Bounds x="1130" y="560" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ed_av_di" bpmnElement="ed_av">
+        <dc:Bounds x="1280" y="360" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_cont_di" bpmnElement="g_cont" isMarkerVisible="true">
+        <dc:Bounds x="1465" y="375" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1516" y="418" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_urg_di" bpmnElement="s_urg">
+        <dc:Bounds x="1730" y="560" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_tc_di" bpmnElement="e_tc">
+        <dc:Bounds x="1730" y="760" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_m3_di" bpmnElement="g_m3" isMarkerVisible="true">
+        <dc:Bounds x="1915" y="375" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_m2_di" bpmnElement="g_m2" isMarkerVisible="true">
+        <dc:Bounds x="2065" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_fim_di" bpmnElement="g_fim" isMarkerVisible="true">
+        <dc:Bounds x="2215" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2211" y="225" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_sai_di" bpmnElement="a_sai">
+        <dc:Bounds x="2330" y="160" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_pub_di" bpmnElement="s_pub">
+        <dc:Bounds x="2930" y="560" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_cons_di" bpmnElement="e_cons">
+        <dc:Bounds x="3080" y="760" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fim2_di" bpmnElement="e_fim2">
+        <dc:Bounds x="3272" y="782" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3257" y="818" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_res_di" bpmnElement="s_res">
+        <dc:Bounds x="2600" y="560" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Proc_Diario_f1_di" bpmnElement="Proc_Diario_f1">
+        <di:waypoint x="308" y="200" />
+        <di:waypoint x="380" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f2_di" bpmnElement="Proc_Diario_f2">
+        <di:waypoint x="440" y="240" />
+        <di:waypoint x="440" y="600" />
+        <di:waypoint x="530" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f3_di" bpmnElement="Proc_Diario_f3">
+        <di:waypoint x="590" y="560" />
+        <di:waypoint x="590" y="200" />
+        <di:waypoint x="715" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f16_di" bpmnElement="Proc_Diario_f16">
+        <di:waypoint x="2240" y="175" />
+        <di:waypoint x="2240" y="122" />
+        <di:waypoint x="740" y="122" />
+        <di:waypoint x="740" y="175" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1480" y="97" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f4_di" bpmnElement="Proc_Diario_f4">
+        <di:waypoint x="765" y="200" />
+        <di:waypoint x="830" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f5_di" bpmnElement="Proc_Diario_f5">
+        <di:waypoint x="950" y="200" />
+        <di:waypoint x="1015" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f6_di" bpmnElement="Proc_Diario_f6">
+        <di:waypoint x="1040" y="225" />
+        <di:waypoint x="1040" y="600" />
+        <di:waypoint x="1130" y="600" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1046" y="403" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f7_di" bpmnElement="Proc_Diario_f7">
+        <di:waypoint x="1065" y="200" />
+        <di:waypoint x="2065" y="200" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1555" y="175" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f8_di" bpmnElement="Proc_Diario_f8">
+        <di:waypoint x="1190" y="560" />
+        <di:waypoint x="1190" y="400" />
+        <di:waypoint x="1280" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f9_di" bpmnElement="Proc_Diario_f9">
+        <di:waypoint x="1400" y="400" />
+        <di:waypoint x="1465" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f10_di" bpmnElement="Proc_Diario_f10">
+        <di:waypoint x="1490" y="425" />
+        <di:waypoint x="1490" y="600" />
+        <di:waypoint x="1730" y="600" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1496" y="503" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f11_di" bpmnElement="Proc_Diario_f11">
+        <di:waypoint x="1490" y="375" />
+        <di:waypoint x="1490" y="328" />
+        <di:waypoint x="1940" y="328" />
+        <di:waypoint x="1940" y="375" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1705" y="303" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f12_di" bpmnElement="Proc_Diario_f12">
+        <di:waypoint x="1790" y="640" />
+        <di:waypoint x="1790" y="760" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f13_di" bpmnElement="Proc_Diario_f13">
+        <di:waypoint x="1850" y="800" />
+        <di:waypoint x="1940" y="800" />
+        <di:waypoint x="1940" y="425" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f14_di" bpmnElement="Proc_Diario_f14">
+        <di:waypoint x="1965" y="400" />
+        <di:waypoint x="2090" y="400" />
+        <di:waypoint x="2090" y="225" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f15_di" bpmnElement="Proc_Diario_f15">
+        <di:waypoint x="2115" y="200" />
+        <di:waypoint x="2215" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f17_di" bpmnElement="Proc_Diario_f17">
+        <di:waypoint x="2265" y="200" />
+        <di:waypoint x="2330" y="200" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2288" y="175" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f18_di" bpmnElement="Proc_Diario_f18">
+        <di:waypoint x="2390" y="240" />
+        <di:waypoint x="2390" y="600" />
+        <di:waypoint x="2600" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f24_di" bpmnElement="Proc_Diario_f24">
+        <di:waypoint x="2990" y="640" />
+        <di:waypoint x="2990" y="800" />
+        <di:waypoint x="3080" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Diario_f25_di" bpmnElement="Proc_Diario_f25">
+        <di:waypoint x="3200" y="800" />
+        <di:waypoint x="3272" y="800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_171jvh4_di" bpmnElement="Flow_171jvh4">
+        <di:waypoint x="2720" y="600" />
+        <di:waypoint x="2930" y="600" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

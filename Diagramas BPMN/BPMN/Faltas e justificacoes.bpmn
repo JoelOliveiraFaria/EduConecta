@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Defs_Proc_Faltas" targetNamespace="http://educonecta.pt/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.31.0">
+  <bpmn:collaboration id="Col_Proc_Faltas">
+    <bpmn:participant id="Part_Proc_Faltas" name="EduConecta - Faltas e justificações" processRef="Proc_Faltas" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Faltas" name="Gestão de faltas e justificações" isExecutable="false">
+    <bpmn:laneSet id="LS_Proc_Faltas">
+      <bpmn:lane id="L1_DT" name="Diretor de Turma">
+        <bpmn:flowNodeRef>t_anal</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_dec</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_mot</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L1_DOC" name="Docente">
+        <bpmn:flowNodeRef>s1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_sel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_pres</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_faltas</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_sem</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L1_SIS" name="Sistema EduConecta">
+        <bpmn:flowNodeRef>t_reg</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_notEE</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_guard</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_notDT</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_atual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_lim</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_alerta</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_merge2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_notFim</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L1_EE" name="Encarregado de Educação">
+        <bpmn:flowNodeRef>t_cons</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_just</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_sub</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_semJ</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>lk_out</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>lk_in</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_consDec</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_fim</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_timer</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s1" name="Início da aula">
+      <bpmn:outgoing>Proc_Faltas_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="t_sel" name="Selecionar turma">
+      <bpmn:incoming>Proc_Faltas_f1</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="t_pres" name="Registar presenças">
+      <bpmn:incoming>Proc_Faltas_f2</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_faltas" name="Existem faltas?">
+      <bpmn:incoming>Proc_Faltas_f3</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f4</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Faltas_f5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="e_sem" name="Sem faltas">
+      <bpmn:incoming>Proc_Faltas_f4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="t_reg" name="Registar faltas">
+      <bpmn:incoming>Proc_Faltas_f5</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="t_notEE" name="Notificar encarregado da falta">
+      <bpmn:incoming>Proc_Faltas_f6</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f7</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="t_cons" name="Consultar falta">
+      <bpmn:incoming>Proc_Faltas_f7</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f8</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_just" name="Pretende justificar?">
+      <bpmn:incoming>Proc_Faltas_f8</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f9</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Faltas_f10</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="t_sub" name="Submeter justificação (observações e anexo)">
+      <bpmn:incoming>Proc_Faltas_f9</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f13</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_semJ" name="">
+      <bpmn:incoming>Proc_Faltas_f10</bpmn:incoming>
+      <bpmn:incoming>Proc_Faltas_f11</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f12</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="lk_out" name="Falta não justificada">
+      <bpmn:incoming>Proc_Faltas_f12</bpmn:incoming>
+      <bpmn:linkEventDefinition id="lk_out_ld" name="A" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:serviceTask id="t_guard" name="Guardar justificação e anexo (pendente)">
+      <bpmn:incoming>Proc_Faltas_f13</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f14</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="t_notDT" name="Notificar diretor de turma">
+      <bpmn:incoming>Proc_Faltas_f14</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f15</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="t_anal" name="Avaliar justificação e anexo">
+      <bpmn:incoming>Proc_Faltas_f15</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f16</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_dec" name="Justificação aprovada?">
+      <bpmn:incoming>Proc_Faltas_f16</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f17</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Faltas_f18</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="t_mot" name="Indicar motivo da rejeição">
+      <bpmn:incoming>Proc_Faltas_f18</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f19</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateCatchEvent id="lk_in" name="Falta não justificada">
+      <bpmn:outgoing>Proc_Faltas_f20</bpmn:outgoing>
+      <bpmn:linkEventDefinition id="lk_in_ld" name="A" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="g_merge" name="">
+      <bpmn:incoming>Proc_Faltas_f17</bpmn:incoming>
+      <bpmn:incoming>Proc_Faltas_f19</bpmn:incoming>
+      <bpmn:incoming>Proc_Faltas_f20</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f21</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_atual" name="Atualizar estado da falta">
+      <bpmn:incoming>Proc_Faltas_f21</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f22</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_lim" name="Limite de faltas atingido?">
+      <bpmn:incoming>Proc_Faltas_f22</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f23</bpmn:outgoing>
+      <bpmn:outgoing>Proc_Faltas_f24</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="t_alerta" name="Alertar diretor de turma">
+      <bpmn:incoming>Proc_Faltas_f23</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f25</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="g_merge2" name="">
+      <bpmn:incoming>Proc_Faltas_f24</bpmn:incoming>
+      <bpmn:incoming>Proc_Faltas_f25</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f26</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="t_notFim" name="Notificar estado ao encarregado">
+      <bpmn:incoming>Proc_Faltas_f26</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f27</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:userTask id="t_consDec" name="Consultar decisão">
+      <bpmn:incoming>Proc_Faltas_f27</bpmn:incoming>
+      <bpmn:outgoing>Proc_Faltas_f28</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e_fim" name="Processo concluído">
+      <bpmn:incoming>Proc_Faltas_f28</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="b_timer" name="Prazo de 3 dias úteis expirado" attachedToRef="t_sub" cancelActivity="true">
+      <bpmn:outgoing>Proc_Faltas_f11</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1o9zmvb">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">P3D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Proc_Faltas_f1" name="" sourceRef="s1" targetRef="t_sel" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f2" name="" sourceRef="t_sel" targetRef="t_pres" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f3" name="" sourceRef="t_pres" targetRef="g_faltas" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f4" name="Não" sourceRef="g_faltas" targetRef="e_sem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${numFaltas == 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f5" name="Sim" sourceRef="g_faltas" targetRef="t_reg">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${numFaltas &gt; 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f6" name="" sourceRef="t_reg" targetRef="t_notEE" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f7" name="" sourceRef="t_notEE" targetRef="t_cons" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f8" name="" sourceRef="t_cons" targetRef="g_just" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f9" name="Sim" sourceRef="g_just" targetRef="t_sub">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${justificar == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f10" name="Não" sourceRef="g_just" targetRef="g_semJ">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${justificar == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f13" name="" sourceRef="t_sub" targetRef="t_guard" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f11" name="" sourceRef="b_timer" targetRef="g_semJ" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f12" name="" sourceRef="g_semJ" targetRef="lk_out" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f14" name="" sourceRef="t_guard" targetRef="t_notDT" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f15" name="" sourceRef="t_notDT" targetRef="t_anal" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f16" name="" sourceRef="t_anal" targetRef="g_dec" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f17" name="Sim" sourceRef="g_dec" targetRef="g_merge">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${decisao == "APROVADA"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f18" name="Não" sourceRef="g_dec" targetRef="t_mot">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${decisao == "REJEITADA"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f19" name="" sourceRef="t_mot" targetRef="g_merge" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f20" name="" sourceRef="lk_in" targetRef="g_merge" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f21" name="" sourceRef="g_merge" targetRef="t_atual" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f22" name="" sourceRef="t_atual" targetRef="g_lim" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f23" name="Sim" sourceRef="g_lim" targetRef="t_alerta">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${faltasInjustificadas &gt;= limite}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f24" name="Não" sourceRef="g_lim" targetRef="g_merge2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${faltasInjustificadas &lt; limite}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Proc_Faltas_f25" name="" sourceRef="t_alerta" targetRef="g_merge2" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f26" name="" sourceRef="g_merge2" targetRef="t_notFim" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f27" name="" sourceRef="t_notFim" targetRef="t_consDec" />
+    <bpmn:sequenceFlow id="Proc_Faltas_f28" name="" sourceRef="t_consDec" targetRef="e_fim" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dia_Proc_Faltas">
+    <bpmndi:BPMNPlane id="Pl_Proc_Faltas" bpmnElement="Col_Proc_Faltas">
+      <bpmndi:BPMNShape id="Part_Proc_Faltas_di" bpmnElement="Part_Proc_Faltas" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="3250" height="910" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L1_DT_di" bpmnElement="L1_DT" isHorizontal="true">
+        <dc:Bounds x="190" y="790" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L1_DOC_di" bpmnElement="L1_DOC" isHorizontal="true">
+        <dc:Bounds x="190" y="590" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L1_SIS_di" bpmnElement="L1_SIS" isHorizontal="true">
+        <dc:Bounds x="190" y="390" width="3220" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L1_EE_di" bpmnElement="L1_EE" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="3220" height="310" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s1_di" bpmnElement="s1">
+        <dc:Bounds x="272" y="672" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="257" y="708" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_sel_di" bpmnElement="t_sel">
+        <dc:Bounds x="380" y="650" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_pres_di" bpmnElement="t_pres">
+        <dc:Bounds x="530" y="650" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_faltas_di" bpmnElement="g_faltas" isMarkerVisible="true">
+        <dc:Bounds x="715" y="665" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="703" y="715" width="75" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sem_di" bpmnElement="e_sem">
+        <dc:Bounds x="872" y="672" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="864" y="708" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_reg_di" bpmnElement="t_reg">
+        <dc:Bounds x="830" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_notEE_di" bpmnElement="t_notEE">
+        <dc:Bounds x="980" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_cons_di" bpmnElement="t_cons">
+        <dc:Bounds x="1130" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_just_di" bpmnElement="g_just" isMarkerVisible="true">
+        <dc:Bounds x="1315" y="265" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1317" y="315" width="47" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_sub_di" bpmnElement="t_sub">
+        <dc:Bounds x="1430" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_semJ_di" bpmnElement="g_semJ" isMarkerVisible="true">
+        <dc:Bounds x="1615" y="193" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lk_out_di" bpmnElement="lk_out">
+        <dc:Bounds x="1772" y="200" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1766" y="236" width="49" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_guard_di" bpmnElement="t_guard">
+        <dc:Bounds x="1580" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_notDT_di" bpmnElement="t_notDT">
+        <dc:Bounds x="1730" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_anal_di" bpmnElement="t_anal">
+        <dc:Bounds x="1880" y="850" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_dec_di" bpmnElement="g_dec" isMarkerVisible="true">
+        <dc:Bounds x="2065" y="865" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2061" y="915" width="69" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_mot_di" bpmnElement="t_mot">
+        <dc:Bounds x="2180" y="850" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lk_in_di" bpmnElement="lk_in">
+        <dc:Bounds x="2222" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2216" y="308" width="49" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_merge_di" bpmnElement="g_merge" isMarkerVisible="true">
+        <dc:Bounds x="2215" y="465" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_atual_di" bpmnElement="t_atual">
+        <dc:Bounds x="2330" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_lim_di" bpmnElement="g_lim" isMarkerVisible="true">
+        <dc:Bounds x="2515" y="465" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2503" y="515" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_alerta_di" bpmnElement="t_alerta">
+        <dc:Bounds x="2630" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_merge2_di" bpmnElement="g_merge2" isMarkerVisible="true">
+        <dc:Bounds x="2815" y="465" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_notFim_di" bpmnElement="t_notFim">
+        <dc:Bounds x="2930" y="450" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_consDec_di" bpmnElement="t_consDec">
+        <dc:Bounds x="3080" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fim_di" bpmnElement="e_fim">
+        <dc:Bounds x="3272" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3266" y="308" width="48" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_16m4i2d_di" bpmnElement="b_timer">
+        <dc:Bounds x="1500" y="232" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1418" y="200" width="77" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f1_di" bpmnElement="Proc_Faltas_f1">
+        <di:waypoint x="308" y="690" />
+        <di:waypoint x="380" y="690" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f2_di" bpmnElement="Proc_Faltas_f2">
+        <di:waypoint x="500" y="690" />
+        <di:waypoint x="530" y="690" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f3_di" bpmnElement="Proc_Faltas_f3">
+        <di:waypoint x="650" y="690" />
+        <di:waypoint x="715" y="690" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f4_di" bpmnElement="Proc_Faltas_f4">
+        <di:waypoint x="765" y="690" />
+        <di:waypoint x="872" y="690" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="808" y="665" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f5_di" bpmnElement="Proc_Faltas_f5">
+        <di:waypoint x="740" y="665" />
+        <di:waypoint x="740" y="490" />
+        <di:waypoint x="830" y="490" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="746" y="568" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f6_di" bpmnElement="Proc_Faltas_f6">
+        <di:waypoint x="950" y="490" />
+        <di:waypoint x="980" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f7_di" bpmnElement="Proc_Faltas_f7">
+        <di:waypoint x="1040" y="450" />
+        <di:waypoint x="1040" y="290" />
+        <di:waypoint x="1130" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f8_di" bpmnElement="Proc_Faltas_f8">
+        <di:waypoint x="1250" y="290" />
+        <di:waypoint x="1315" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f9_di" bpmnElement="Proc_Faltas_f9">
+        <di:waypoint x="1365" y="290" />
+        <di:waypoint x="1430" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1388" y="265" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f10_di" bpmnElement="Proc_Faltas_f10">
+        <di:waypoint x="1340" y="265" />
+        <di:waypoint x="1340" y="218" />
+        <di:waypoint x="1615" y="218" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1345" y="232" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f11_di" bpmnElement="Proc_Faltas_f11">
+        <di:waypoint x="1518" y="232" />
+        <di:waypoint x="1518" y="218" />
+        <di:waypoint x="1615" y="218" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f12_di" bpmnElement="Proc_Faltas_f12">
+        <di:waypoint x="1665" y="218" />
+        <di:waypoint x="1772" y="218" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f13_di" bpmnElement="Proc_Faltas_f13">
+        <di:waypoint x="1490" y="330" />
+        <di:waypoint x="1490" y="490" />
+        <di:waypoint x="1580" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f14_di" bpmnElement="Proc_Faltas_f14">
+        <di:waypoint x="1700" y="490" />
+        <di:waypoint x="1730" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f15_di" bpmnElement="Proc_Faltas_f15">
+        <di:waypoint x="1790" y="530" />
+        <di:waypoint x="1790" y="890" />
+        <di:waypoint x="1880" y="890" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f16_di" bpmnElement="Proc_Faltas_f16">
+        <di:waypoint x="2000" y="890" />
+        <di:waypoint x="2065" y="890" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f17_di" bpmnElement="Proc_Faltas_f17">
+        <di:waypoint x="2090" y="865" />
+        <di:waypoint x="2090" y="490" />
+        <di:waypoint x="2215" y="490" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2096" y="668" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f18_di" bpmnElement="Proc_Faltas_f18">
+        <di:waypoint x="2115" y="890" />
+        <di:waypoint x="2180" y="890" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2137" y="865" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f19_di" bpmnElement="Proc_Faltas_f19">
+        <di:waypoint x="2240" y="850" />
+        <di:waypoint x="2240" y="515" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f20_di" bpmnElement="Proc_Faltas_f20">
+        <di:waypoint x="2240" y="308" />
+        <di:waypoint x="2240" y="465" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f21_di" bpmnElement="Proc_Faltas_f21">
+        <di:waypoint x="2265" y="490" />
+        <di:waypoint x="2330" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f22_di" bpmnElement="Proc_Faltas_f22">
+        <di:waypoint x="2450" y="490" />
+        <di:waypoint x="2515" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f23_di" bpmnElement="Proc_Faltas_f23">
+        <di:waypoint x="2565" y="490" />
+        <di:waypoint x="2630" y="490" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2588" y="465" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f24_di" bpmnElement="Proc_Faltas_f24">
+        <di:waypoint x="2540" y="465" />
+        <di:waypoint x="2540" y="430" />
+        <di:waypoint x="2840" y="430" />
+        <di:waypoint x="2840" y="465" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2680" y="405" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f25_di" bpmnElement="Proc_Faltas_f25">
+        <di:waypoint x="2750" y="490" />
+        <di:waypoint x="2815" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f26_di" bpmnElement="Proc_Faltas_f26">
+        <di:waypoint x="2865" y="490" />
+        <di:waypoint x="2930" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f27_di" bpmnElement="Proc_Faltas_f27">
+        <di:waypoint x="2990" y="450" />
+        <di:waypoint x="2990" y="290" />
+        <di:waypoint x="3080" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Proc_Faltas_f28_di" bpmnElement="Proc_Faltas_f28">
+        <di:waypoint x="3200" y="290" />
+        <di:waypoint x="3272" y="290" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
