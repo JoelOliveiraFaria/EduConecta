@@ -1,0 +1,798 @@
+import os
+
+from flask import Flask, jsonify, request
+from pymongo import MongoClient, ReturnDocument
+from pymongo.errors import DuplicateKeyError, PyMongoError
+from bson import ObjectId
+
+app = Flask(__name__)
+app.json.ensure_ascii = False
+
+database_name = os.environ["MONGO_SCHOOL_DATABASE"]
+
+client = MongoClient(
+    host=os.environ["MONGO_HOST"],
+    port=int(os.environ.get("MONGO_PORT", "27017")),
+    username=os.environ["MONGO_SCHOOL_USERNAME"],
+    password=os.environ["MONGO_SCHOOL_PASSWORD"],
+    authSource=database_name,
+    serverSelectionTimeoutMS=3000,
+    connectTimeoutMS=3000,
+    socketTimeoutMS=3000,
+)
+
+database = client[database_name]
+
+
+@app.get("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "school",
+        "application": "EduConecta",
+    }), 200
+
+
+@app.get("/ready")
+def ready():
+    try:
+        database.list_collection_names()
+    except PyMongoError:
+        return jsonify({
+            "status": "not_ready",
+            "service": "school",
+            "database": "unavailable",
+        }), 503
+
+    return jsonify({
+        "status": "ready",
+        "service": "school",
+        "database": "connected",
+    }), 200
+
+@app.get("/alunos")
+def listar_alunos():
+    try:
+        documentos = (
+            database["alunos"]
+            .find({}, {"nome": 1, "numero_processo": 1})
+            .sort("_id", 1)
+            .limit(50)
+        )
+
+        alunos = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "numero_processo": documento.get("numero_processo"),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os alunos.",
+        }), 503
+
+    return jsonify({
+        "alunos": alunos,
+        "quantidade": len(alunos),
+        "limite": 50,
+    }), 200
+
+@app.post("/alunos")
+def criar_aluno():
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return jsonify({
+            "error": "invalid_json",
+            "message": "O corpo do pedido deve ser um objeto JSON válido.",
+        }), 400
+
+    campos_permitidos = {"nome", "numero_processo"}
+
+    if set(dados) - campos_permitidos:
+        return jsonify({
+            "error": "unknown_fields",
+            "message": "Os campos permitidos são nome e numero_processo.",
+        }), 400
+
+    nome = dados.get("nome")
+    numero_processo = dados.get("numero_processo")
+
+    if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+        return jsonify({
+            "error": "invalid_name",
+            "message": "O nome deve ser texto com 2 a 150 caracteres.",
+        }), 400
+
+    if (
+        not isinstance(numero_processo, str)
+        or not 1 <= len(numero_processo.strip()) <= 50
+    ):
+        return jsonify({
+            "error": "invalid_process_number",
+            "message": "O número de processo deve ser texto com 1 a 50 caracteres.",
+        }), 400
+
+    aluno = {
+        "nome": nome.strip(),
+        "numero_processo": numero_processo.strip(),
+    }
+
+    try:
+        resultado = database["alunos"].insert_one(aluno)
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "duplicate_process_number",
+            "message": "Já existe um aluno com esse número de processo.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível guardar o aluno.",
+        }), 503
+
+    return jsonify({
+        "id": str(resultado.inserted_id),
+        "nome": aluno["nome"],
+        "numero_processo": aluno["numero_processo"],
+    }), 201
+
+@app.get("/alunos/<aluno_id>")
+def obter_aluno(aluno_id):
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    try:
+        aluno = database["alunos"].find_one(
+            {"_id": ObjectId(aluno_id)},
+            {"nome": 1, "numero_processo": 1},
+        )
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar o aluno.",
+        }), 503
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    return jsonify({
+        "id": str(aluno["_id"]),
+        "nome": aluno.get("nome"),
+        "numero_processo": aluno.get("numero_processo"),
+    }), 200
+
+@app.patch("/alunos/<aluno_id>")
+def atualizar_aluno(aluno_id):
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return jsonify({
+            "error": "invalid_json",
+            "message": "O corpo do pedido deve ser um objeto JSON válido.",
+        }), 400
+
+    if not dados:
+        return jsonify({
+            "error": "empty_update",
+            "message": "Envia pelo menos um campo para atualizar.",
+        }), 400
+
+    campos_permitidos = {"nome", "numero_processo"}
+
+    if set(dados) - campos_permitidos:
+        return jsonify({
+            "error": "unknown_fields",
+            "message": "Os campos permitidos são nome e numero_processo.",
+        }), 400
+
+    alteracoes = {}
+
+    if "nome" in dados:
+        nome = dados["nome"]
+
+        if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+            return jsonify({
+                "error": "invalid_name",
+                "message": "O nome deve ser texto com 2 a 150 caracteres.",
+            }), 400
+
+        alteracoes["nome"] = nome.strip()
+
+    if "numero_processo" in dados:
+        numero_processo = dados["numero_processo"]
+
+        if (
+            not isinstance(numero_processo, str)
+            or not 1 <= len(numero_processo.strip()) <= 50
+        ):
+            return jsonify({
+                "error": "invalid_process_number",
+                "message": "O número de processo deve ser texto com 1 a 50 caracteres.",
+            }), 400
+
+        alteracoes["numero_processo"] = numero_processo.strip()
+
+    try:
+        aluno = database["alunos"].find_one_and_update(
+            {"_id": ObjectId(aluno_id)},
+            {"$set": alteracoes},
+            projection={"nome": 1, "numero_processo": 1},
+            return_document=ReturnDocument.AFTER,
+            upsert=False,
+        )
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "duplicate_process_number",
+            "message": "Já existe um aluno com esse número de processo.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível atualizar o aluno.",
+        }), 503
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    return jsonify({
+        "id": str(aluno["_id"]),
+        "nome": aluno.get("nome"),
+        "numero_processo": aluno.get("numero_processo"),
+    }), 200
+
+@app.post("/turmas")
+def criar_turma():
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return jsonify({
+            "error": "invalid_json",
+            "message": "O corpo do pedido deve ser um objeto JSON válido.",
+        }), 400
+
+    campos_permitidos = {"nome", "ano_letivo"}
+
+    if set(dados) - campos_permitidos:
+        return jsonify({
+            "error": "unknown_fields",
+            "message": "Os campos permitidos são nome e ano_letivo.",
+        }), 400
+
+    nome = dados.get("nome")
+    ano_letivo = dados.get("ano_letivo")
+
+    if not isinstance(nome, str) or not 1 <= len(nome.strip()) <= 100:
+        return jsonify({
+            "error": "invalid_class_name",
+            "message": "O nome da turma deve ter entre 1 e 100 caracteres.",
+        }), 400
+
+    if not isinstance(ano_letivo, str):
+        return jsonify({
+            "error": "invalid_school_year",
+            "message": "O ano letivo deve ter o formato AAAA/AAAA.",
+        }), 400
+
+    ano_letivo = ano_letivo.strip()
+    partes = ano_letivo.split("/")
+
+    if (
+        len(partes) != 2
+        or any(
+            len(parte) != 4
+            or not parte.isascii()
+            or not parte.isdigit()
+            for parte in partes
+        )
+    ):
+        return jsonify({
+            "error": "invalid_school_year",
+            "message": "O ano letivo deve ter o formato AAAA/AAAA.",
+        }), 400
+
+    primeiro_ano, segundo_ano = map(int, partes)
+
+    if not 1900 <= primeiro_ano <= 9998 or segundo_ano != primeiro_ano + 1:
+        return jsonify({
+            "error": "invalid_school_year",
+            "message": "O ano letivo deve conter dois anos consecutivos.",
+        }), 400
+
+    turma = {
+        "nome": nome.strip(),
+        "ano_letivo": ano_letivo,
+    }
+
+    try:
+        resultado = database["turmas"].insert_one(turma)
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "duplicate_class",
+            "message": "Já existe uma turma com esse nome nesse ano letivo.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível guardar a turma.",
+        }), 503
+
+    return jsonify({
+        "id": str(resultado.inserted_id),
+        "nome": turma["nome"],
+        "ano_letivo": turma["ano_letivo"],
+    }), 201
+
+
+@app.get("/turmas")
+def listar_turmas():
+    try:
+        documentos = (
+            database["turmas"]
+            .find({}, {"nome": 1, "ano_letivo": 1})
+            .sort([("ano_letivo", -1), ("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        turmas = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "ano_letivo": documento.get("ano_letivo"),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar as turmas.",
+        }), 503
+
+    return jsonify({
+        "turmas": turmas,
+        "quantidade": len(turmas),
+        "limite": 50,
+    }), 200
+
+@app.put("/alunos/<aluno_id>/turma")
+def associar_aluno_turma(aluno_id):
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return jsonify({
+            "error": "invalid_json",
+            "message": "O corpo do pedido deve ser um objeto JSON válido.",
+        }), 400
+
+    if set(dados) != {"turma_id"}:
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia apenas o campo obrigatório turma_id.",
+        }), 400
+
+    turma_id = dados["turma_id"]
+
+    if not isinstance(turma_id, str) or not ObjectId.is_valid(turma_id):
+        return jsonify({
+            "error": "invalid_class_id",
+            "message": "O identificador da turma é inválido.",
+        }), 400
+
+    try:
+        turma = database["turmas"].find_one(
+            {"_id": ObjectId(turma_id)},
+            {"nome": 1, "ano_letivo": 1},
+        )
+
+        if turma is None:
+            return jsonify({
+                "error": "class_not_found",
+                "message": "Turma não encontrada.",
+            }), 404
+
+        aluno = database["alunos"].find_one_and_update(
+            {"_id": ObjectId(aluno_id)},
+            {"$set": {"turma_id": turma["_id"]}},
+            projection={"nome": 1, "numero_processo": 1, "turma_id": 1},
+            return_document=ReturnDocument.AFTER,
+            upsert=False,
+        )
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível associar o aluno à turma.",
+        }), 503
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    return jsonify({
+        "id": str(aluno["_id"]),
+        "nome": aluno.get("nome"),
+        "numero_processo": aluno.get("numero_processo"),
+        "turma": {
+            "id": str(turma["_id"]),
+            "nome": turma.get("nome"),
+            "ano_letivo": turma.get("ano_letivo"),
+        },
+    }), 200
+
+@app.get("/turmas/<turma_id>/alunos")
+def listar_alunos_turma(turma_id):
+    if not ObjectId.is_valid(turma_id):
+        return jsonify({
+            "error": "invalid_class_id",
+            "message": "O identificador da turma é inválido.",
+        }), 400
+
+    try:
+        turma = database["turmas"].find_one(
+            {"_id": ObjectId(turma_id)},
+            {"nome": 1, "ano_letivo": 1},
+        )
+
+        if turma is None:
+            return jsonify({
+                "error": "class_not_found",
+                "message": "Turma não encontrada.",
+            }), 404
+
+        documentos = (
+            database["alunos"]
+            .find(
+                {"turma_id": turma["_id"]},
+                {"nome": 1, "numero_processo": 1},
+            )
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        alunos = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "numero_processo": documento.get("numero_processo"),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os alunos da turma.",
+        }), 503
+
+    return jsonify({
+        "turma": {
+            "id": str(turma["_id"]),
+            "nome": turma.get("nome"),
+            "ano_letivo": turma.get("ano_letivo"),
+        },
+        "alunos": alunos,
+        "quantidade": len(alunos),
+        "limite": 50,
+    }), 200
+
+@app.post("/encarregados")
+def criar_encarregado():
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return jsonify({
+            "error": "invalid_json",
+            "message": "O corpo do pedido deve ser um objeto JSON válido.",
+        }), 400
+
+    if set(dados) - {"nome", "telefone"}:
+        return jsonify({
+            "error": "unknown_fields",
+            "message": "Os campos permitidos são nome e telefone.",
+        }), 400
+
+    nome = dados.get("nome")
+    telefone = dados.get("telefone", "")
+
+    if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+        return jsonify({
+            "error": "invalid_name",
+            "message": "O nome deve ser texto com 2 a 150 caracteres.",
+        }), 400
+
+    if not isinstance(telefone, str) or len(telefone.strip()) > 30:
+        return jsonify({
+            "error": "invalid_phone",
+            "message": "O telefone deve ser texto com até 30 caracteres.",
+        }), 400
+
+    encarregado = {
+        "nome": nome.strip(),
+        "telefone": telefone.strip(),
+    }
+
+    try:
+        resultado = database["encarregados_educacao"].insert_one(encarregado)
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível guardar o encarregado de educação.",
+        }), 503
+
+    return jsonify({
+        "id": str(resultado.inserted_id),
+        "nome": encarregado["nome"],
+        "telefone": encarregado["telefone"],
+    }), 201
+
+
+@app.get("/encarregados")
+def listar_encarregados():
+    try:
+        documentos = (
+            database["encarregados_educacao"]
+            .find({}, {"nome": 1, "telefone": 1})
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        encarregados = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "telefone": documento.get("telefone", ""),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os encarregados de educação.",
+        }), 503
+
+    return jsonify({
+        "encarregados": encarregados,
+        "quantidade": len(encarregados),
+        "limite": 50,
+    }), 200
+
+@app.put("/alunos/<aluno_id>/encarregados/<encarregado_id>")
+def associar_encarregado_aluno(aluno_id, encarregado_id):
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    if not ObjectId.is_valid(encarregado_id):
+        return jsonify({
+            "error": "invalid_guardian_id",
+            "message": "O identificador do encarregado é inválido.",
+        }), 400
+
+    try:
+        encarregado = database["encarregados_educacao"].find_one(
+            {"_id": ObjectId(encarregado_id)},
+            {"nome": 1},
+        )
+
+        if encarregado is None:
+            return jsonify({
+                "error": "guardian_not_found",
+                "message": "Encarregado de educação não encontrado.",
+            }), 404
+
+        aluno = database["alunos"].find_one_and_update(
+            {"_id": ObjectId(aluno_id)},
+            {"$addToSet": {"encarregados_ids": encarregado["_id"]}},
+            projection={"nome": 1},
+            return_document=ReturnDocument.AFTER,
+            upsert=False,
+        )
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível associar o encarregado ao aluno.",
+        }), 503
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    return jsonify({
+        "aluno": {
+            "id": str(aluno["_id"]),
+            "nome": aluno.get("nome"),
+        },
+        "encarregado": {
+            "id": str(encarregado["_id"]),
+            "nome": encarregado.get("nome"),
+        },
+        "message": "Associação confirmada.",
+    }), 200
+
+
+@app.get("/alunos/<aluno_id>/encarregados")
+def listar_encarregados_aluno(aluno_id):
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    try:
+        aluno = database["alunos"].find_one(
+            {"_id": ObjectId(aluno_id)},
+            {"nome": 1, "encarregados_ids": 1},
+        )
+
+        if aluno is None:
+            return jsonify({
+                "error": "student_not_found",
+                "message": "Aluno não encontrado.",
+            }), 404
+
+        documentos = (
+            database["encarregados_educacao"]
+            .find(
+                {"_id": {"$in": aluno.get("encarregados_ids", [])}},
+                {"nome": 1, "telefone": 1},
+            )
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        encarregados = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "telefone": documento.get("telefone", ""),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os encarregados do aluno.",
+        }), 503
+
+    return jsonify({
+        "aluno": {
+            "id": str(aluno["_id"]),
+            "nome": aluno.get("nome"),
+        },
+        "encarregados": encarregados,
+        "quantidade": len(encarregados),
+        "limite": 50,
+    }), 200
+
+@app.get("/encarregados/<encarregado_id>/alunos")
+def listar_alunos_encarregado(encarregado_id):
+    if not ObjectId.is_valid(encarregado_id):
+        return jsonify({
+            "error": "invalid_guardian_id",
+            "message": "O identificador do encarregado é inválido.",
+        }), 400
+
+    try:
+        encarregado = database["encarregados_educacao"].find_one(
+            {"_id": ObjectId(encarregado_id)},
+            {"nome": 1},
+        )
+
+        if encarregado is None:
+            return jsonify({
+                "error": "guardian_not_found",
+                "message": "Encarregado de educação não encontrado.",
+            }), 404
+
+        documentos = (
+            database["alunos"]
+            .find(
+                {"encarregados_ids": encarregado["_id"]},
+                {"nome": 1, "numero_processo": 1, "turma_id": 1},
+            )
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        alunos = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "numero_processo": documento.get("numero_processo"),
+                "turma_id": (
+                    str(documento["turma_id"])
+                    if documento.get("turma_id") is not None
+                    else None
+                ),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os alunos do encarregado.",
+        }), 503
+
+    return jsonify({
+        "encarregado": {
+            "id": str(encarregado["_id"]),
+            "nome": encarregado.get("nome"),
+        },
+        "alunos": alunos,
+        "quantidade": len(alunos),
+        "limite": 50,
+    }), 200
