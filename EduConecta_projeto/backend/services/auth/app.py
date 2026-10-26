@@ -7,17 +7,22 @@ from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+
 from datetime import datetime, timedelta, timezone
+
 
 from email_validator import EmailNotValidError, validate_email
 from werkzeug.security import check_password_hash, generate_password_hash
 from bson import ObjectId
 
+
 app = Flask(__name__)
 app.json.ensure_ascii = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
+
 database_name = os.environ["MONGO_AUTH_DATABASE"]
+
 
 client = MongoClient(
     host=os.environ["MONGO_HOST"],
@@ -30,17 +35,82 @@ client = MongoClient(
     socketTimeoutMS=3000,
 )
 
+
 database = client[database_name]
+
 
 jwt_secret = os.environ["JWT_SECRET_KEY"]
 
+
 if len(jwt_secret) < 32:
     raise RuntimeError("A chave JWT deve ter pelo menos 32 caracteres.")
+
 
 dummy_password_hash = generate_password_hash(
     secrets.token_urlsafe(32),
     method="scrypt",
 )
+
+
+def _descodificar_token(autorizacao):
+    partes = autorizacao.split()
+
+    if len(partes) != 2 or partes[0].lower() != "bearer":
+        return None, (
+            jsonify({
+                "error": "authentication_required",
+                "message": "Envia um token no cabeçalho Authorization: Bearer.",
+            }),
+            401,
+            {"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        conteudo = jwt.decode(
+            partes[1],
+            jwt_secret,
+            algorithms=["HS256"],
+            issuer="educonecta-auth",
+            audience="educonecta-api",
+            options={
+                "require": ["sub", "iss", "aud", "iat", "exp", "jti"],
+            },
+        )
+
+    except jwt.ExpiredSignatureError:
+        return None, (
+            jsonify({
+                "error": "token_expired",
+                "message": "A sessão expirou. Inicia sessão novamente.",
+            }),
+            401,
+            {"WWW-Authenticate": "Bearer"},
+        )
+
+    except jwt.InvalidTokenError:
+        return None, (
+            jsonify({
+                "error": "invalid_token",
+                "message": "O token é inválido.",
+            }),
+            401,
+            {"WWW-Authenticate": "Bearer"},
+        )
+
+    utilizador_id = conteudo.get("sub")
+
+    if not isinstance(utilizador_id, str) or not ObjectId.is_valid(utilizador_id):
+        return None, (
+            jsonify({
+                "error": "invalid_token",
+                "message": "O token é inválido.",
+            }),
+            401,
+            {"WWW-Authenticate": "Bearer"},
+        )
+
+    return utilizador_id, None
+
 
 @app.get("/health")
 def health():
@@ -56,6 +126,7 @@ def ready():
     try:
         database.list_collection_names()
 
+
     except PyMongoError:
         return jsonify({
             "status": "not_ready",
@@ -63,11 +134,13 @@ def ready():
             "database": "unavailable",
         }), 503
 
+
     return jsonify({
         "status": "ready",
         "service": "auth",
         "database": "connected",
     }), 200
+
 
 @app.post("/registo")
 def registar_utilizador():
@@ -77,7 +150,9 @@ def registar_utilizador():
             "message": "Envia o pedido com Content-Type: application/json.",
         }), 415
 
+
     dados = request.get_json(silent=True)
+
 
     if not isinstance(dados, dict):
         return jsonify({
@@ -85,15 +160,18 @@ def registar_utilizador():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
+
     if set(dados) - {"nome", "email", "password"}:
         return jsonify({
             "error": "unknown_fields",
             "message": "Os campos permitidos são nome, email e password.",
         }), 400
 
+
     nome = dados.get("nome")
     email = dados.get("email")
     password = dados.get("password")
+
 
     if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
         return jsonify({
@@ -101,11 +179,13 @@ def registar_utilizador():
             "message": "O nome deve ter entre 2 e 150 caracteres.",
         }), 400
 
+
     if not isinstance(email, str) or len(email) > 254:
         return jsonify({
             "error": "invalid_email",
             "message": "Indica um email válido.",
         }), 400
+
 
     try:
         email = validate_email(
@@ -113,17 +193,20 @@ def registar_utilizador():
             check_deliverability=False,
         ).normalized.lower()
 
+
     except EmailNotValidError:
         return jsonify({
             "error": "invalid_email",
             "message": "Indica um email válido.",
         }), 400
 
+
     if not isinstance(password, str) or not 15 <= len(password) <= 128:
         return jsonify({
             "error": "invalid_password",
             "message": "A palavra-passe deve ter entre 15 e 128 caracteres.",
         }), 400
+
 
     utilizador = {
         "nome": nome.strip(),
@@ -134,8 +217,10 @@ def registar_utilizador():
         "criado_em": datetime.now(timezone.utc),
     }
 
+
     try:
         resultado = database["utilizadores"].insert_one(utilizador)
+
 
     except DuplicateKeyError:
         return jsonify({
@@ -143,11 +228,13 @@ def registar_utilizador():
             "message": "Já existe uma conta com esse email.",
         }), 409
 
+
     except PyMongoError:
         return jsonify({
             "error": "database_unavailable",
             "message": "Não foi possível criar a conta.",
         }), 503
+
 
     return jsonify({
         "id": str(resultado.inserted_id),
@@ -157,6 +244,7 @@ def registar_utilizador():
         "estado": utilizador["estado"],
     }), 201
 
+
 @app.post("/login")
 def login():
     if not request.is_json:
@@ -165,7 +253,9 @@ def login():
             "message": "Envia o pedido com Content-Type: application/json.",
         }), 415
 
+
     dados = request.get_json(silent=True)
+
 
     if not isinstance(dados, dict):
         return jsonify({
@@ -173,14 +263,17 @@ def login():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
+
     if set(dados) != {"email", "password"}:
         return jsonify({
             "error": "invalid_fields",
             "message": "Envia apenas os campos obrigatórios email e password.",
         }), 400
 
+
     email = dados["email"]
     password = dados["password"]
+
 
     if (
         not isinstance(email, str)
@@ -193,11 +286,13 @@ def login():
             "message": "Email ou palavra-passe incorretos.",
         }), 401
 
+
     try:
         email = validate_email(
             email.strip(),
             check_deliverability=False,
         ).normalized.lower()
+
 
     except EmailNotValidError:
         return jsonify({
@@ -205,8 +300,10 @@ def login():
             "message": "Email ou palavra-passe incorretos.",
         }), 401
 
+
     try:
         utilizador = database["utilizadores"].find_one({"email": email})
+
 
     except PyMongoError:
         return jsonify({
@@ -214,13 +311,16 @@ def login():
             "message": "Não foi possível iniciar sessão.",
         }), 503
 
+
     password_hash = (
         utilizador.get("password_hash", dummy_password_hash)
         if utilizador
         else dummy_password_hash
     )
 
+
     password_correta = check_password_hash(password_hash, password)
+
 
     if utilizador is None or not password_correta:
         return jsonify({
@@ -228,13 +328,16 @@ def login():
             "message": "Email ou palavra-passe incorretos.",
         }), 401
 
+
     if utilizador.get("estado") != "ativo":
         return jsonify({
             "error": "account_inactive",
             "message": "A conta ainda não está ativa.",
         }), 403
 
+
     agora = datetime.now(timezone.utc)
+
 
     token = jwt.encode(
         {
@@ -249,6 +352,7 @@ def login():
         algorithm="HS256",
     )
 
+
     resposta = jsonify({
         "access_token": token,
         "token_type": "Bearer",
@@ -262,64 +366,29 @@ def login():
     })
     resposta.headers["Cache-Control"] = "no-store"
 
+
     return resposta, 200
+
 
 @app.get("/me")
 def consultar_conta():
-    autorizacao = request.headers.get("Authorization", "")
-    partes = autorizacao.split()
+    utilizador_id, erro = _descodificar_token(request.headers.get("Authorization", ""))
 
-    if (
-        len(partes) != 2
-        or partes[0].lower() != "bearer"
-    ):
-        return jsonify({
-            "error": "authentication_required",
-            "message": "Envia um token no cabeçalho Authorization: Bearer.",
-        }), 401, {"WWW-Authenticate": "Bearer"}
-
-    token = partes[1]
-
-    try:
-        conteudo = jwt.decode(
-            token,
-            jwt_secret,
-            algorithms=["HS256"],
-            issuer="educonecta-auth",
-            audience="educonecta-api",
-            options={
-                "require": ["sub", "iss", "aud", "iat", "exp", "jti"],
-            },
-        )
-
-    except jwt.ExpiredSignatureError:
-        return jsonify({
-            "error": "token_expired",
-            "message": "A sessão expirou. Inicia sessão novamente.",
-        }), 401, {"WWW-Authenticate": "Bearer"}
-
-    except jwt.InvalidTokenError:
-        return jsonify({
-            "error": "invalid_token",
-            "message": "O token é inválido.",
-        }), 401, {"WWW-Authenticate": "Bearer"}
-
-    utilizador_id = conteudo.get("sub")
-
-    if (
-        not isinstance(utilizador_id, str)
-        or not ObjectId.is_valid(utilizador_id)
-    ):
-        return jsonify({
-            "error": "invalid_token",
-            "message": "O token é inválido.",
-        }), 401, {"WWW-Authenticate": "Bearer"}
+    if erro is not None:
+        return erro
 
     try:
         utilizador = database["utilizadores"].find_one(
             {"_id": ObjectId(utilizador_id)},
-            {"nome": 1, "email": 1, "perfil": 1, "estado": 1},
+            {
+                "nome": 1,
+                "email": 1,
+                "perfil": 1,
+                "estado": 1,
+                "deve_alterar_password": 1,
+            },
         )
+
 
     except PyMongoError:
         return jsonify({
@@ -327,17 +396,27 @@ def consultar_conta():
             "message": "Não foi possível consultar a conta.",
         }), 503
 
+
     if utilizador is None:
         return jsonify({
             "error": "invalid_token",
             "message": "A conta associada à sessão já não existe.",
         }), 401, {"WWW-Authenticate": "Bearer"}
 
+
     if utilizador.get("estado") != "ativo":
         return jsonify({
             "error": "account_inactive",
             "message": "A conta não está ativa.",
         }), 403
+
+
+    if utilizador.get("deve_alterar_password"):
+        return jsonify({
+            "error": "password_change_required",
+            "message": "Tens de definir uma nova palavra-passe antes de continuar.",
+        }), 403
+
 
     resposta = jsonify({
         "id": str(utilizador["_id"]),
@@ -347,5 +426,103 @@ def consultar_conta():
         "estado": utilizador["estado"],
     })
     resposta.headers["Cache-Control"] = "no-store"
+
+
+    return resposta, 200
+
+
+@app.post("/password/alterar")
+def alterar_password():
+    utilizador_id, erro = _descodificar_token(request.headers.get("Authorization", ""))
+
+    if erro is not None:
+        return erro
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia o pedido com Content-Type: application/json.",
+        }), 415
+
+
+    dados = request.get_json(silent=True)
+
+
+    if (
+        not isinstance(dados, dict)
+        or set(dados) != {"password_atual", "password_nova"}
+        or not isinstance(dados["password_atual"], str)
+        or not isinstance(dados["password_nova"], str)
+    ):
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia apenas password_atual e password_nova.",
+        }), 400
+
+
+    password_atual = dados["password_atual"]
+    password_nova = dados["password_nova"]
+
+
+    if not 1 <= len(password_atual) <= 128:
+        return jsonify({
+            "error": "invalid_credentials",
+            "message": "Palavra-passe atual incorreta.",
+        }), 401
+
+
+    if not 15 <= len(password_nova) <= 128 or password_nova == password_atual:
+        return jsonify({
+            "error": "invalid_password",
+            "message": "A nova palavra-passe deve ter entre 15 e 128 caracteres e ser diferente da atual.",
+        }), 400
+
+
+    try:
+        utilizador = database["utilizadores"].find_one(
+            {"_id": ObjectId(utilizador_id)},
+            {"password_hash": 1, "estado": 1},
+        )
+
+
+        if utilizador is None or utilizador.get("estado") != "ativo":
+            return jsonify({
+                "error": "invalid_token",
+                "message": "A conta associada à sessão já não está disponível.",
+            }), 401, {"WWW-Authenticate": "Bearer"}
+
+
+        if not check_password_hash(utilizador["password_hash"], password_atual):
+            return jsonify({
+                "error": "invalid_credentials",
+                "message": "Palavra-passe atual incorreta.",
+            }), 401
+
+
+        database["utilizadores"].update_one(
+            {"_id": utilizador["_id"]},
+            {
+                "$set": {
+                    "password_hash": generate_password_hash(password_nova, method="scrypt"),
+                    "deve_alterar_password": False,
+                    "password_alterada_em": datetime.now(timezone.utc),
+                },
+                "$unset": {"password_temporaria_expira_em": ""},
+            },
+        )
+
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível alterar a palavra-passe.",
+        }), 503
+
+
+    resposta = jsonify({
+        "message": "Palavra-passe alterada com sucesso.",
+    })
+    resposta.headers["Cache-Control"] = "no-store"
+
 
     return resposta, 200

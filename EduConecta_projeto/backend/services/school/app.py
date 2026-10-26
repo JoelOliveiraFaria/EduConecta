@@ -1,9 +1,14 @@
 import os
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from bson import ObjectId
+
+import json
+
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
@@ -796,3 +801,149 @@ def listar_alunos_encarregado(encarregado_id):
         "quantidade": len(alunos),
         "limite": 50,
     }), 200
+
+@app.before_request
+def verificar_acesso_escolar():
+    if request.endpoint is None:
+        return None
+
+    if request.endpoint in {"health", "ready"}:
+        return None
+
+    autorizacao = request.headers.get("Authorization", "")
+    partes = autorizacao.split()
+
+    if (
+        len(autorizacao) > 8192
+        or len(partes) != 2
+        or partes[0].lower() != "bearer"
+    ):
+        return jsonify({
+            "error": "authentication_required",
+            "message": "É necessário iniciar sessão.",
+        }), 401, {"WWW-Authenticate": "Bearer"}
+
+    pedido = Request(
+        "http://auth:8000/me",
+        headers={"Authorization": f"Bearer {partes[1]}"},
+        method="GET",
+    )
+
+    try:
+        with urlopen(pedido, timeout=5) as resposta:
+            utilizador = json.loads(resposta.read().decode("utf-8"))
+
+    except HTTPError as erro:
+        codigo = erro.code
+        erro.close()
+
+        if codigo == 401:
+            return jsonify({
+                "error": "invalid_session",
+                "message": "Sessão inválida ou expirada. Inicia sessão novamente.",
+            }), 401, {"WWW-Authenticate": "Bearer"}
+
+        if codigo == 403:
+            return jsonify({
+                "error": "account_inactive",
+                "message": "A conta não está ativa.",
+            }), 403
+
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "Não foi possível verificar a sessão.",
+        }), 503
+
+    except (URLError, OSError, ValueError, UnicodeError):
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "O serviço de autenticação não está disponível.",
+        }), 503
+
+    if (
+        not isinstance(utilizador, dict)
+        or not isinstance(utilizador.get("id"), str)
+        or not ObjectId.is_valid(utilizador["id"])
+        or utilizador.get("estado") != "ativo"
+        or not isinstance(utilizador.get("perfil"), str)
+    ):
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "Não foi possível validar a resposta da autenticação.",
+        }), 503
+
+    g.utilizador = utilizador
+
+    if request.endpoint == "listar_meus_alunos":
+        if utilizador["perfil"] == "encarregado":
+            return None
+
+    elif utilizador["perfil"] == "admin":
+        return None
+
+    return jsonify({
+        "error": "forbidden",
+        "message": "Não tens permissão para realizar esta operação.",
+    }), 403
+
+@app.get("/me/alunos")
+def listar_meus_alunos():
+    utilizador_id = ObjectId(g.utilizador["id"])
+
+    try:
+        encarregado = database["encarregados_educacao"].find_one(
+            {"utilizador_id": utilizador_id},
+            {"nome": 1},
+        )
+
+        if encarregado is None:
+            return jsonify({
+                "error": "school_profile_not_linked",
+                "message": "A conta ainda não tem um registo escolar associado.",
+            }), 403
+
+        documentos = (
+            database["alunos"]
+            .find(
+                {"encarregados_ids": encarregado["_id"]},
+                {"nome": 1, "numero_processo": 1, "turma_id": 1},
+            )
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        alunos = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "numero_processo": documento.get("numero_processo"),
+                "turma_id": (
+                    str(documento["turma_id"])
+                    if documento.get("turma_id") is not None
+                    else None
+                ),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os teus educandos.",
+        }), 503
+
+    return jsonify({
+        "encarregado": {
+            "id": str(encarregado["_id"]),
+            "nome": encarregado.get("nome"),
+        },
+        "alunos": alunos,
+        "quantidade": len(alunos),
+        "limite": 50,
+    }), 200
+
+
+@app.after_request
+def impedir_cache_dados_escolares(resposta):
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
