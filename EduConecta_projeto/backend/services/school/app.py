@@ -874,8 +874,14 @@ def verificar_acesso_escolar():
 
     g.utilizador = utilizador
 
-    if request.endpoint == "listar_meus_alunos":
-        if utilizador["perfil"] == "encarregado":
+    permissoes_pessoais = {
+        "listar_meus_alunos": {"encarregado"},
+        "listar_minhas_turmas": {"docente", "educadora", "auxiliar"},
+        "listar_alunos_minha_turma": {"docente", "educadora", "auxiliar"},
+    }
+
+    if request.endpoint in permissoes_pessoais:
+        if utilizador["perfil"] in permissoes_pessoais[request.endpoint]:
             return None
 
     elif utilizador["perfil"] == "admin":
@@ -947,3 +953,596 @@ def listar_meus_alunos():
 def impedir_cache_dados_escolares(resposta):
     resposta.headers["Cache-Control"] = "no-store"
     return resposta
+
+
+@app.put("/encarregados/<encarregado_id>/utilizador")
+def associar_conta_encarregado(encarregado_id):
+    if g.utilizador.get("perfil") != "admin":
+        return jsonify({
+            "error": "forbidden",
+            "message": "Esta operação exige uma conta de administrador.",
+        }), 403
+
+    if not ObjectId.is_valid(encarregado_id):
+        return jsonify({
+            "error": "invalid_guardian_id",
+            "message": "O identificador do encarregado é inválido.",
+        }), 400
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if (
+        not isinstance(dados, dict)
+        or set(dados) != {"utilizador_id"}
+        or not isinstance(dados["utilizador_id"], str)
+        or not ObjectId.is_valid(dados["utilizador_id"])
+    ):
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia apenas utilizador_id com um identificador válido.",
+        }), 400
+
+    conta_id = str(ObjectId(dados["utilizador_id"]))
+
+    pedido = Request(
+        f"http://auth:8000/admin/utilizadores/{conta_id}",
+        headers={
+            "Authorization": request.headers.get("Authorization", ""),
+        },
+        method="GET",
+    )
+
+    try:
+        with urlopen(pedido, timeout=5) as resposta:
+            conta = json.loads(resposta.read().decode("utf-8"))
+
+    except HTTPError as erro:
+        codigo = erro.code
+        erro.close()
+
+        if codigo == 404:
+            return jsonify({
+                "error": "user_not_found",
+                "message": "A conta de utilizador não existe.",
+            }), 404
+
+        if codigo == 401:
+            return jsonify({
+                "error": "invalid_session",
+                "message": "A sessão expirou. Inicia sessão novamente.",
+            }), 401, {"WWW-Authenticate": "Bearer"}
+
+        if codigo == 403:
+            return jsonify({
+                "error": "forbidden",
+                "message": "Não tens permissão para consultar essa conta.",
+            }), 403
+
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "Não foi possível verificar a conta.",
+        }), 503
+
+    except (URLError, OSError, ValueError, UnicodeError):
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "O serviço de autenticação não está disponível.",
+        }), 503
+
+    if not isinstance(conta, dict) or conta.get("id") != conta_id:
+        return jsonify({
+            "error": "authentication_unavailable",
+            "message": "A resposta da autenticação é inválida.",
+        }), 503
+
+    if conta.get("perfil") != "encarregado":
+        return jsonify({
+            "error": "invalid_user_profile",
+            "message": "A conta deve ter o perfil encarregado.",
+        }), 409
+
+    if conta.get("estado") != "ativo":
+        return jsonify({
+            "error": "account_inactive",
+            "message": "A conta de utilizador não está ativa.",
+        }), 409
+
+    encarregado_oid = ObjectId(encarregado_id)
+    conta_oid = ObjectId(conta_id)
+
+    try:
+        encarregado = database["encarregados_educacao"].find_one(
+            {"_id": encarregado_oid},
+            {"nome": 1, "utilizador_id": 1},
+        )
+
+        if encarregado is None:
+            return jsonify({
+                "error": "guardian_not_found",
+                "message": "Encarregado de educação não encontrado.",
+            }), 404
+
+        associado = database["encarregados_educacao"].find_one_and_update(
+            {
+                "_id": encarregado_oid,
+                "$or": [
+                    {"utilizador_id": {"$exists": False}},
+                    {"utilizador_id": conta_oid},
+                ],
+            },
+            {"$set": {"utilizador_id": conta_oid}},
+            projection={"nome": 1, "utilizador_id": 1},
+            return_document=ReturnDocument.AFTER,
+            upsert=False,
+        )
+
+        if associado is None:
+            return jsonify({
+                "error": "guardian_already_linked",
+                "message": (
+                    "O encarregado já está associado a outra conta "
+                    "ou o registo foi alterado entretanto."
+                ),
+            }), 409
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "user_already_linked",
+            "message": "Esta conta já está associada a outro encarregado.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível guardar a associação.",
+        }), 503
+
+    return jsonify({
+        "message": "Conta associada ao encarregado.",
+        "encarregado": {
+            "id": str(associado["_id"]),
+            "nome": associado.get("nome"),
+            "utilizador_id": str(associado["utilizador_id"]),
+        },
+    }), 200
+
+
+def consultar_conta_profissional_auth(conta_id):
+    pedido = Request(
+        f"http://auth:8000/admin/utilizadores/{conta_id}",
+        headers={
+            "Authorization": request.headers.get("Authorization", ""),
+        },
+        method="GET",
+    )
+
+    try:
+        with urlopen(pedido, timeout=5) as resposta:
+            conta = json.loads(resposta.read().decode("utf-8"))
+
+    except HTTPError as erro:
+        codigo = erro.code
+        erro.close()
+
+        if codigo == 404:
+            return None, (
+                jsonify({
+                    "error": "user_not_found",
+                    "message": "A conta de utilizador não existe.",
+                }),
+                404,
+            )
+
+        if codigo in {401, 403}:
+            return None, (
+                jsonify({
+                    "error": "authorization_failed",
+                    "message": "Não foi possível autorizar esta operação.",
+                }),
+                codigo,
+            )
+
+        return None, (
+            jsonify({
+                "error": "authentication_unavailable",
+                "message": "Não foi possível consultar a conta.",
+            }),
+            503,
+        )
+
+    except (URLError, OSError, ValueError, UnicodeError):
+        return None, (
+            jsonify({
+                "error": "authentication_unavailable",
+                "message": "O serviço de autenticação não está disponível.",
+            }),
+            503,
+        )
+
+    if not isinstance(conta, dict) or conta.get("id") != conta_id:
+        return None, (
+            jsonify({
+                "error": "authentication_unavailable",
+                "message": "A resposta da autenticação é inválida.",
+            }),
+            503,
+        )
+
+    return conta, None
+
+
+@app.post("/profissionais")
+def criar_profissional():
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if (
+        not isinstance(dados, dict)
+        or set(dados) != {"utilizador_id"}
+        or not isinstance(dados["utilizador_id"], str)
+        or not ObjectId.is_valid(dados["utilizador_id"])
+    ):
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia apenas utilizador_id com um identificador válido.",
+        }), 400
+
+    conta_id = str(ObjectId(dados["utilizador_id"]))
+    conta, erro = consultar_conta_profissional_auth(conta_id)
+
+    if erro is not None:
+        return erro
+
+    if conta.get("perfil") not in {"docente", "educadora", "auxiliar"}:
+        return jsonify({
+            "error": "invalid_user_profile",
+            "message": "A conta deve ter perfil docente, educadora ou auxiliar.",
+        }), 409
+
+    if conta.get("estado") != "ativo":
+        return jsonify({
+            "error": "account_inactive",
+            "message": "A conta de utilizador não está ativa.",
+        }), 409
+
+    profissional = {
+        "utilizador_id": ObjectId(conta_id),
+        "nome": conta.get("nome"),
+        "perfil": conta["perfil"],
+    }
+
+    try:
+        existente = database["profissionais"].find_one(
+            {"utilizador_id": profissional["utilizador_id"]},
+            {"_id": 1},
+        )
+
+        if existente is not None:
+            return jsonify({
+                "error": "professional_already_registered",
+                "message": "Esta conta já tem um registo profissional.",
+            }), 409
+
+        resultado = database["profissionais"].insert_one(profissional)
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "professional_already_registered",
+            "message": "Esta conta já tem um registo profissional.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível criar o profissional.",
+        }), 503
+
+    return jsonify({
+        "id": str(resultado.inserted_id),
+        "utilizador_id": conta_id,
+        "nome": profissional["nome"],
+        "perfil": profissional["perfil"],
+    }), 201
+
+
+@app.get("/profissionais")
+def listar_profissionais():
+    try:
+        documentos = (
+            database["profissionais"]
+            .find({}, {
+                "nome": 1,
+                "perfil": 1,
+                "utilizador_id": 1,
+            })
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        profissionais = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "perfil": documento.get("perfil"),
+                "utilizador_id": (
+                    str(documento["utilizador_id"])
+                    if documento.get("utilizador_id") is not None
+                    else None
+                ),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os profissionais.",
+        }), 503
+
+    return jsonify({
+        "profissionais": profissionais,
+        "quantidade": len(profissionais),
+        "limite": 50,
+    }), 200
+
+
+@app.put("/turmas/<turma_id>/profissionais/<profissional_id>")
+def associar_profissional_turma(turma_id, profissional_id):
+    if not ObjectId.is_valid(turma_id):
+        return jsonify({
+            "error": "invalid_class_id",
+            "message": "O identificador da turma é inválido.",
+        }), 400
+
+    if not ObjectId.is_valid(profissional_id):
+        return jsonify({
+            "error": "invalid_professional_id",
+            "message": "O identificador do profissional é inválido.",
+        }), 400
+
+    try:
+        profissional = database["profissionais"].find_one(
+            {"_id": ObjectId(profissional_id)},
+            {"nome": 1, "perfil": 1, "utilizador_id": 1},
+        )
+
+        if profissional is None:
+            return jsonify({
+                "error": "professional_not_found",
+                "message": "Profissional não encontrado.",
+            }), 404
+
+        conta_oid = profissional.get("utilizador_id")
+
+        if not isinstance(conta_oid, ObjectId):
+            return jsonify({
+                "error": "professional_account_not_linked",
+                "message": "O profissional não tem uma conta válida associada.",
+            }), 409
+
+        conta, erro = consultar_conta_profissional_auth(str(conta_oid))
+
+        if erro is not None:
+            return erro
+
+        if (
+            conta.get("estado") != "ativo"
+            or conta.get("perfil") not in {"docente", "educadora", "auxiliar"}
+            or conta.get("perfil") != profissional.get("perfil")
+        ):
+            return jsonify({
+                "error": "professional_account_invalid",
+                "message": "A conta não está ativa ou o perfil não corresponde.",
+            }), 409
+
+        turma = database["turmas"].find_one_and_update(
+            {"_id": ObjectId(turma_id)},
+            {
+                "$addToSet": {
+                    "profissionais_ids": profissional["_id"],
+                },
+            },
+            projection={
+                "nome": 1,
+                "ano_letivo": 1,
+                "profissionais_ids": 1,
+            },
+            return_document=ReturnDocument.AFTER,
+            upsert=False,
+        )
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível associar o profissional à turma.",
+        }), 503
+
+    if turma is None:
+        return jsonify({
+            "error": "class_not_found",
+            "message": "Turma não encontrada.",
+        }), 404
+
+    return jsonify({
+        "message": "Profissional associado à turma.",
+        "turma": {
+            "id": str(turma["_id"]),
+            "nome": turma.get("nome"),
+            "ano_letivo": turma.get("ano_letivo"),
+        },
+        "profissional": {
+            "id": str(profissional["_id"]),
+            "nome": conta.get("nome"),
+            "perfil": conta["perfil"],
+        },
+    }), 200
+
+
+def obter_profissional_da_sessao():
+    try:
+        profissional = database["profissionais"].find_one(
+            {"utilizador_id": ObjectId(g.utilizador["id"])},
+            {
+                "nome": 1,
+                "perfil": 1,
+                "utilizador_id": 1,
+            },
+        )
+
+    except PyMongoError:
+        return None, (
+            jsonify({
+                "error": "database_unavailable",
+                "message": "Não foi possível consultar o profissional.",
+            }),
+            503,
+        )
+
+    if profissional is None:
+        return None, (
+            jsonify({
+                "error": "professional_profile_not_linked",
+                "message": "A conta ainda não tem um registo profissional associado.",
+            }),
+            403,
+        )
+
+    if (
+        g.utilizador.get("perfil") not in {"docente", "educadora", "auxiliar"}
+        or profissional.get("perfil") != g.utilizador["perfil"]
+    ):
+        return None, (
+            jsonify({
+                "error": "professional_profile_mismatch",
+                "message": "O perfil da conta não corresponde ao registo profissional.",
+            }),
+            403,
+        )
+
+    return profissional, None
+
+
+@app.get("/me/turmas")
+def listar_minhas_turmas():
+    profissional, erro = obter_profissional_da_sessao()
+
+    if erro is not None:
+        return erro
+
+    try:
+        documentos = (
+            database["turmas"]
+            .find(
+                {"profissionais_ids": profissional["_id"]},
+                {"nome": 1, "ano_letivo": 1},
+            )
+            .sort([("ano_letivo", -1), ("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        turmas = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "ano_letivo": documento.get("ano_letivo"),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar as tuas turmas.",
+        }), 503
+
+    return jsonify({
+        "profissional": {
+            "id": str(profissional["_id"]),
+            "nome": g.utilizador.get("nome"),
+            "perfil": g.utilizador["perfil"],
+        },
+        "turmas": turmas,
+        "quantidade": len(turmas),
+        "limite": 50,
+    }), 200
+
+
+@app.get("/me/turmas/<turma_id>/alunos")
+def listar_alunos_minha_turma(turma_id):
+    if not ObjectId.is_valid(turma_id):
+        return jsonify({
+            "error": "invalid_class_id",
+            "message": "O identificador da turma é inválido.",
+        }), 400
+
+    profissional, erro = obter_profissional_da_sessao()
+
+    if erro is not None:
+        return erro
+
+    try:
+        turma = database["turmas"].find_one(
+            {
+                "_id": ObjectId(turma_id),
+                "profissionais_ids": profissional["_id"],
+            },
+            {"nome": 1, "ano_letivo": 1},
+        )
+
+        if turma is None:
+            return jsonify({
+                "error": "class_not_accessible",
+                "message": "A turma não existe ou não te está atribuída.",
+            }), 404
+
+        documentos = (
+            database["alunos"]
+            .find(
+                {"turma_id": turma["_id"]},
+                {
+                    "nome": 1,
+                    "numero_processo": 1,
+                    "turma_id": 1,
+                },
+            )
+            .sort([("nome", 1), ("_id", 1)])
+            .limit(50)
+        )
+
+        alunos = [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "numero_processo": documento.get("numero_processo"),
+                "turma_id": str(turma["_id"]),
+            }
+            for documento in documentos
+        ]
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar os alunos da turma.",
+        }), 503
+
+    return jsonify({
+        "turma": {
+            "id": str(turma["_id"]),
+            "nome": turma.get("nome"),
+            "ano_letivo": turma.get("ano_letivo"),
+        },
+        "alunos": alunos,
+        "quantidade": len(alunos),
+        "limite": 50,
+    }), 200

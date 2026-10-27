@@ -526,3 +526,336 @@ def alterar_password():
 
 
     return resposta, 200
+
+import smtplib
+import ssl
+
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
+
+
+@app.before_request
+def bloquear_registo_publico():
+    if request.endpoint == "registar_utilizador":
+        return jsonify({
+            "error": "registration_disabled",
+            "message": "A criação de contas é feita pela administração.",
+        }), 403
+
+
+@app.post("/admin/utilizadores")
+def criar_utilizador_com_email():
+    utilizador_id, erro = _descodificar_token(
+        request.headers.get("Authorization", "")
+    )
+
+    if erro is not None:
+        return erro
+
+    try:
+        administrador = database["utilizadores"].find_one(
+            {"_id": ObjectId(utilizador_id)},
+            {
+                "perfil": 1,
+                "estado": 1,
+                "deve_alterar_password": 1,
+            },
+        )
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível verificar a conta.",
+        }), 503
+
+    if (
+        administrador is None
+        or administrador.get("estado") != "ativo"
+        or administrador.get("perfil") != "admin"
+        or administrador.get("deve_alterar_password")
+    ):
+        return jsonify({
+            "error": "forbidden",
+            "message": "Esta operação exige uma conta de administrador autorizada.",
+        }), 403
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    if (
+        not isinstance(dados, dict)
+        or set(dados) != {"nome", "email", "perfil"}
+    ):
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia apenas nome, email e perfil.",
+        }), 400
+
+    nome = dados["nome"]
+    email = dados["email"]
+    perfil = dados["perfil"]
+
+    if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+        return jsonify({
+            "error": "invalid_name",
+            "message": "O nome deve ter entre 2 e 150 caracteres.",
+        }), 400
+
+    if not isinstance(email, str) or len(email) > 254:
+        return jsonify({
+            "error": "invalid_email",
+            "message": "Indica um email válido.",
+        }), 400
+
+    try:
+        email = validate_email(
+            email.strip(),
+            check_deliverability=False,
+        ).normalized.lower()
+    except EmailNotValidError:
+        return jsonify({
+            "error": "invalid_email",
+            "message": "Indica um email válido.",
+        }), 400
+
+        perfis_permitidos = {
+        "admin",
+        "encarregado",
+        "docente",
+        "educadora",
+        "auxiliar",
+    }
+
+    if not isinstance(perfil, str) or perfil not in {
+        "admin",
+        "encarregado",
+        "docente",
+        "educadora",
+        "auxiliar",
+    }:
+        return jsonify({
+            "error": "invalid_profile",
+            "message": (
+                "Os perfis disponíveis são admin, encarregado, "
+                "docente, educadora e auxiliar."
+            ),
+        }), 400
+    
+    remetente = os.environ.get("SMTP_USERNAME")
+    password_smtp = os.environ.get("SMTP_PASSWORD")
+
+    if not remetente or not password_smtp:
+        return jsonify({
+            "error": "email_not_configured",
+            "message": "O envio de emails não está configurado.",
+        }), 503
+
+    temporaria = secrets.token_urlsafe(24)
+
+    utilizador = {
+        "nome": nome.strip(),
+        "email": email,
+        "perfil": perfil,
+        "estado": "provisionamento",
+        "password_hash": generate_password_hash(
+            temporaria,
+            method="scrypt",
+        ),
+        "deve_alterar_password": True,
+        "criado_em": datetime.now(timezone.utc),
+        "criado_por": ObjectId(utilizador_id),
+        "email_credenciais_estado": "pendente",
+    }
+
+    try:
+        existente = database["utilizadores"].find_one(
+            {"email": email},
+            {"_id": 1},
+        )
+
+        if existente is not None:
+            return jsonify({
+                "error": "email_already_registered",
+                "message": "Já existe uma conta com esse email.",
+            }), 409
+
+        resultado = database["utilizadores"].insert_one(utilizador)
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "email_already_registered",
+            "message": "Já existe uma conta com esse email.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível criar a conta.",
+        }), 503
+
+    conta_id = resultado.inserted_id
+
+    mensagem = EmailMessage()
+    mensagem["From"] = remetente
+    mensagem["To"] = email
+    mensagem["Subject"] = "EduConecta - Credenciais de primeiro acesso"
+    mensagem["Date"] = formatdate(localtime=False)
+    mensagem["Message-ID"] = make_msgid()
+
+    mensagem.set_content(
+        f"Olá, {nome.strip()}!\n\n"
+        "Foi criada uma conta para ti na EduConecta.\n\n"
+        f"Email de acesso: {email}\n"
+        f"Palavra-passe temporária: {temporaria}\n\n"
+        "No primeiro acesso, terás de definir uma nova palavra-passe "
+        "antes de utilizar as funcionalidades da aplicação.\n\n"
+        "Não partilhes estas credenciais.\n"
+        "Se não reconheces esta conta, contacta a administração.\n\n"
+        "Equipa EduConecta\n"
+    )
+
+    try:
+        with smtplib.SMTP_SSL(
+            "smtp.gmail.com",
+            465,
+            context=ssl.create_default_context(),
+            timeout=15,
+        ) as servidor:
+            servidor.login(remetente, password_smtp)
+            recusados = servidor.send_message(mensagem)
+
+            if recusados:
+                raise smtplib.SMTPException(
+                    "O destinatário foi recusado."
+                )
+
+    except (smtplib.SMTPException, OSError):
+        return jsonify({
+            "error": "email_delivery_uncertain",
+            "message": (
+                "Não foi possível confirmar o envio. "
+                "A conta permanece bloqueada para revisão administrativa."
+            ),
+            "id": str(conta_id),
+        }), 503
+
+    try:
+        resultado = database["utilizadores"].update_one(
+            {
+                "_id": conta_id,
+                "estado": "provisionamento",
+            },
+            {
+                "$set": {
+                    "estado": "ativo",
+                    "email_credenciais_estado": "aceite_pelo_smtp",
+                    "email_credenciais_enviado_em": datetime.now(timezone.utc),
+                },
+            },
+        )
+
+        if resultado.matched_count != 1:
+            return jsonify({
+                "error": "activation_failed",
+                "message": (
+                    "O email foi aceite pelo servidor, mas a conta "
+                    "não pôde ser ativada. Contacta a administração."
+                ),
+                "id": str(conta_id),
+            }), 503
+
+    except PyMongoError:
+        return jsonify({
+            "error": "activation_failed",
+            "message": (
+                "O email foi aceite pelo servidor, mas não foi possível "
+                "confirmar a ativação da conta."
+            ),
+            "id": str(conta_id),
+        }), 503
+
+    return jsonify({
+        "id": str(conta_id),
+        "nome": utilizador["nome"],
+        "email": email,
+        "perfil": perfil,
+        "estado": "ativo",
+        "deve_alterar_password": True,
+        "email_credenciais_estado": "aceite_pelo_smtp",
+    }), 201
+
+
+@app.after_request
+def impedir_cache_autenticacao(resposta):
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+@app.get("/admin/utilizadores/<conta_id>")
+def consultar_utilizador_administracao(conta_id):
+    administrador_id, erro = _descodificar_token(
+        request.headers.get("Authorization", "")
+    )
+
+    if erro is not None:
+        return erro
+
+    if not ObjectId.is_valid(conta_id):
+        return jsonify({
+            "error": "invalid_user_id",
+            "message": "O identificador da conta é inválido.",
+        }), 400
+
+    try:
+        administrador = database["utilizadores"].find_one(
+            {"_id": ObjectId(administrador_id)},
+            {
+                "perfil": 1,
+                "estado": 1,
+                "deve_alterar_password": 1,
+            },
+        )
+
+        if (
+            administrador is None
+            or administrador.get("perfil") != "admin"
+            or administrador.get("estado") != "ativo"
+            or administrador.get("deve_alterar_password")
+        ):
+            return jsonify({
+                "error": "forbidden",
+                "message": "Esta operação exige uma conta de administrador autorizada.",
+            }), 403
+
+        utilizador = database["utilizadores"].find_one(
+            {"_id": ObjectId(conta_id)},
+            {
+                "nome": 1,
+                "email": 1,
+                "perfil": 1,
+                "estado": 1,
+            },
+        )
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar a conta.",
+        }), 503
+
+    if utilizador is None:
+        return jsonify({
+            "error": "user_not_found",
+            "message": "Conta de utilizador não encontrada.",
+        }), 404
+
+    return jsonify({
+        "id": str(utilizador["_id"]),
+        "nome": utilizador.get("nome"),
+        "email": utilizador.get("email"),
+        "perfil": utilizador.get("perfil"),
+        "estado": utilizador.get("estado"),
+    }), 200
