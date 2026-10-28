@@ -128,13 +128,14 @@ services:
   assiduidade:
     build:
       context: ./backend/services/assiduidade
-    ports:
-      - "127.0.0.1:5005:8000"
-    env_file:
-      - .env.assiduidade
     environment:
       MONGO_HOST: mongo-school
       MONGO_PORT: "27017"
+      MONGO_ASSIDUIDADE_USERNAME: ${MONGO_ASSIDUIDADE_USERNAME:?Falta MONGO_ASSIDUIDADE_USERNAME no .env}
+      MONGO_ASSIDUIDADE_PASSWORD: ${MONGO_ASSIDUIDADE_PASSWORD:?Falta MONGO_ASSIDUIDADE_PASSWORD no .env}
+      MONGO_ASSIDUIDADE_DATABASE: ${MONGO_ASSIDUIDADE_DATABASE:?Falta MONGO_ASSIDUIDADE_DATABASE no .env}
+    ports:
+      - "127.0.0.1:5005:8000"
     depends_on:
       mongo-school:
         condition: service_healthy
@@ -143,7 +144,11 @@ services:
       escolar:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/ready', timeout=3).close()"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/ready', timeout=3).close()"
       interval: 10s
       timeout: 5s
       retries: 5
