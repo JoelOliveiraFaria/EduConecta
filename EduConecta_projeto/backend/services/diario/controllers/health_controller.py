@@ -1,3 +1,5 @@
+"""Controller: endpoints de monitorização (/health, /ready) — sem autenticação."""
+
 from flask import Blueprint, jsonify
 from pymongo.errors import PyMongoError
 
@@ -9,6 +11,7 @@ bp = Blueprint("health", __name__)
 
 @bp.get("/health")
 def health():
+    """Liveness check — responde sempre 200 se o processo estiver a correr."""
     return jsonify({
         "status": "ok",
         "service": "diario",
@@ -18,6 +21,7 @@ def health():
 
 @bp.get("/ready")
 def ready():
+    """Readiness check — só dá 200 se a ligação à Atlas estiver mesmo a funcionar."""
     try:
         modelo_registo.contar_colecoes()
     except PyMongoError:

@@ -1,0 +1,370 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — assiduidade
+  version: "1.0.0"
+  description: >-
+    Registo de presenças/faltas por turma e por aluno. Este serviço não
+    guarda sessões próprias: confia num token JWT emitido pelo serviço
+    `auth` e consulta o serviço `escolar` para saber a que turmas/alunos
+    cada conta tem acesso.
+servers:
+  - url: /
+
+tags:
+  - name: Monitorização
+    description: Endpoints sem autenticação, usados pelo healthcheck do Docker.
+  - name: Assiduidade
+    description: Consulta e marcação de presenças/faltas.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token emitido por `POST /login` no serviço `auth`. É reencaminhado
+        tal e qual para `auth`/`escolar` para validar sessão e permissões.
+
+  schemas:
+    ErroPadrao:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: invalid_fields
+        message:
+          type: string
+          example: Envia estado (presente, falta ou por_marcar) e versao inteira não negativa.
+
+    Estado:
+      type: string
+      description: >-
+        "por_marcar" nunca é gravado explicitamente — é o valor implícito de
+        um aluno sem nenhum registo ainda para o dia.
+      enum: [presente, falta, por_marcar]
+
+    AlunoAssiduidadeTurma:
+      description: Um item da listagem por turma (GET .../turmas/{turma_id}/assiduidade).
+      type: object
+      properties:
+        aluno_id: { type: string, example: 65f1a2b3c4d5e6f7a8b9c0d1 }
+        nome: { type: string, example: Maria Santos }
+        data: { type: string, format: date, example: "2025-10-15" }
+        estado: { $ref: "#/components/schemas/Estado" }
+        versao: { type: integer, minimum: 0, example: 2 }
+        atualizado_em:
+          type: string
+          format: date-time
+          nullable: true
+        turma_id: { type: string, nullable: true }
+        atualizado_por: { type: string, nullable: true }
+        editavel:
+          type: boolean
+          description: >-
+            False se já existir uma marcação, mas pertencente a outra turma
+            (caso raro, de um aluno transferido depois de já ter sido marcado).
+
+    MarcacaoResposta:
+      description: Resultado de PUT .../assiduidade/{dia} — a marcação já gravada.
+      type: object
+      properties:
+        aluno_id: { type: string }
+        data: { type: string, format: date }
+        estado: { $ref: "#/components/schemas/Estado" }
+        versao: { type: integer, minimum: 1 }
+        atualizado_em: { type: string, format: date-time }
+        turma_id: { type: string }
+        atualizado_por: { type: string }
+
+    RegistoEducando:
+      description: >-
+        Um dia do histórico devolvido ao encarregado de educação (sem
+        `turma_id`/`atualizado_por` — informação de gestão que não é
+        mostrada fora do contexto profissional).
+      type: object
+      properties:
+        aluno_id: { type: string }
+        data: { type: string, format: date }
+        estado: { $ref: "#/components/schemas/Estado" }
+        versao: { type: integer, minimum: 0 }
+        atualizado_em: { type: string, format: date-time, nullable: true }
+
+  responses:
+    NaoAutenticado:
+      description: Token em falta, mal formado, inválido ou expirado.
+      headers:
+        WWW-Authenticate:
+          schema: { type: string, example: Bearer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErroPadrao" }
+          examples:
+            semToken:
+              value: { error: authentication_required, message: É necessário iniciar sessão. }
+            sessaoInvalida:
+              value: { error: invalid_session, message: Sessão inválida. }
+    SemPermissao:
+      description: Sessão válida, mas o perfil autenticado não pode usar esta rota.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErroPadrao" }
+          example: { error: forbidden, message: O teu perfil não pode realizar esta operação. }
+    DependenciaIndisponivel:
+      description: >-
+        O `auth` ou o `escolar` não responderam, devolveram algo inesperado,
+        ou recusaram o pedido (403/404 traduzidos para `resource_not_accessible`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErroPadrao" }
+          example: { error: dependency_unavailable, message: Serviço de acesso indisponível. }
+    BaseDeDadosIndisponivel:
+      description: Falha a ligar/escrever no MongoDB Atlas.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErroPadrao" }
+          example: { error: database_unavailable, message: Não foi possível consultar as marcações. }
+    PedidoGrande:
+      description: Corpo do pedido acima de 16 KB.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErroPadrao" }
+          example: { error: request_too_large, message: Pedido demasiado grande. }
+
+paths:
+  /health:
+    get:
+      tags: [Monitorização]
+      summary: Liveness check
+      description: Responde sempre 200 se o processo Flask estiver a correr; não toca na base de dados.
+      security: []
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: assiduidade }
+
+  /ready:
+    get:
+      tags: [Monitorização]
+      summary: Readiness check
+      description: 200 só se a ligação ao MongoDB Atlas estiver mesmo a responder.
+      security: []
+      responses:
+        "200":
+          description: Pronto a servir pedidos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+                  service: { type: string, example: assiduidade }
+                  database: { type: string, example: connected }
+        "503":
+          $ref: "#/components/responses/BaseDeDadosIndisponivel"
+
+  /turmas/{turma_id}/assiduidade:
+    get:
+      tags: [Assiduidade]
+      summary: Listar a assiduidade de uma turma num dia
+      description: >-
+        Só para docente/educadora associados à turma — a verificação de
+        posse da turma é feita pelo serviço `escolar`
+        (GET /me/turmas/{id}/alunos), não localmente.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: data
+          in: query
+          required: true
+          description: Único parâmetro aceite — qualquer outro devolve 400.
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Lista de alunos da turma com o respetivo estado nesse dia.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  turma_id: { type: string }
+                  data: { type: string, format: date }
+                  alunos:
+                    type: array
+                    items: { $ref: "#/components/schemas/AlunoAssiduidadeTurma" }
+                  quantidade: { type: integer }
+                  contagem:
+                    type: object
+                    description: Contagem de alunos por estado (presente/falta/por_marcar).
+                    additionalProperties: { type: integer }
+        "400":
+          description: Query inválida, data inválida, ou identificador de turma inválido.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Turma não encontrada ou não acessível a esta conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "409":
+          description: >-
+            A lista de alunos devolvida pelo `escolar` atingiu o limite de
+            paginação — não há garantia de estar completa, por isso o
+            pedido é recusado em vez de arriscar uma listagem parcial.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+              example: { error: school_list_limit, message: "A lista escolar atingiu o limite; não é possível garantir que esteja completa." }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+
+  /turmas/{turma_id}/alunos/{aluno_id}/assiduidade/{dia}:
+    put:
+      tags: [Assiduidade]
+      summary: Marcar o estado de assiduidade de um aluno num dia
+      description: >-
+        Usa controlo de concorrência otimista por `versao`: envia a versão
+        que viste na última consulta (0 se o aluno ainda não tinha registo
+        nesse dia); se entretanto alguém já tiver alterado a marcação, a
+        API devolve 409 em vez de sobrepor a alteração.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: dia
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado, versao]
+              properties:
+                estado: { $ref: "#/components/schemas/Estado" }
+                versao:
+                  type: integer
+                  minimum: 0
+                  description: Versão vista pelo cliente; 0 só é válido para a primeira marcação do dia.
+            example: { estado: presente, versao: 0 }
+      responses:
+        "200":
+          description: Marcação gravada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MarcacaoResposta" }
+        "400":
+          description: >-
+            Identificador de aluno/data inválidos, parâmetros de query não
+            permitidos nesta rota, ou corpo fora do formato esperado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Turma não acessível, ou o aluno não pertence à turma acessível.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "409":
+          description: Conflito de concorrência — a versão enviada já não corresponde ao estado atual.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+              example: { error: attendance_conflict, message: A marcação mudou. Atualiza a consulta. }
+        "413": { $ref: "#/components/responses/PedidoGrande" }
+        "415":
+          description: Content-Type diferente de application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+
+  /alunos/{aluno_id}/assiduidade:
+    get:
+      tags: [Assiduidade]
+      summary: Histórico de assiduidade de um educando
+      description: >-
+        Só para o encarregado de educação do aluno. Intervalo `inicio`–`fim`
+        limitado a 31 dias inclusive, para limitar o tamanho da resposta.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: inicio
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: fim
+          in: query
+          required: true
+          description: Tem de ser igual ou posterior a `inicio`, no máximo 30 dias depois.
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Um item por cada dia do intervalo (incluindo dias sem marcação, como "por_marcar").
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aluno_id: { type: string }
+                  inicio: { type: string, format: date }
+                  fim: { type: string, format: date }
+                  registos:
+                    type: array
+                    items: { $ref: "#/components/schemas/RegistoEducando" }
+                  quantidade: { type: integer }
+        "400":
+          description: Identificador de aluno inválido, query inválida, ou intervalo de datas inválido/demasiado longo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Aluno não é educando desta conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "409":
+          description: A lista de educandos devolvida pelo `escolar` atingiu o limite de paginação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }
+        "503":
+          description: Dependência (`escolar`) indisponível, resposta inesperada, ou base de dados indisponível.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroPadrao" }

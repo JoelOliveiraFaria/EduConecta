@@ -1,0 +1,505 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — comunicados
+  version: "1.0.0"
+  description: >
+    Comunicados de turma, anexos (fotografias/vídeos via GridFS) e chat
+    entre profissionais e encarregados de educação. A autorização de cada
+    pedido é verificada ao vivo contra os serviços auth e escolar — este
+    serviço não mantém perfis nem relações turma/aluno localmente.
+servers:
+  - url: /
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Erro:
+      type: object
+      properties:
+        error: { type: string, example: invalid_fields }
+        message: { type: string, example: "Envia apenas os campos obrigatórios titulo e texto." }
+
+    Comunicado:
+      type: object
+      properties:
+        id: { type: string }
+        turma_id: { type: string }
+        titulo: { type: string }
+        texto: { type: string }
+        criado_em: { type: string, format: date-time }
+
+    AnexoFotografia:
+      type: object
+      properties:
+        id: { type: string }
+        comunicado_id: { type: string }
+        turma_id: { type: string }
+        nome: { type: string }
+        tipo: { type: string, example: image/jpeg }
+        tamanho_bytes: { type: integer }
+        largura: { type: integer }
+        altura: { type: integer }
+
+    AnexoVideo:
+      type: object
+      properties:
+        id: { type: string }
+        comunicado_id: { type: string }
+        turma_id: { type: string }
+        nome: { type: string }
+        tipo: { type: string, example: video/mp4 }
+        tamanho_bytes: { type: integer }
+        duracao_segundos: { type: number }
+        tem_audio: { type: boolean }
+
+    ItemAnexoListado:
+      type: object
+      properties:
+        id: { type: string }
+        tamanho_bytes: { type: integer }
+        tipo: { type: string }
+        url: { type: string }
+        url_download: { type: string }
+        largura: { type: integer }
+        altura: { type: integer }
+        duracao_segundos: { type: number }
+        tem_audio: { type: boolean }
+
+    Conversa:
+      type: object
+      properties:
+        id: { type: string, description: "SHA-256 dos 3 participantes, 64 hex chars" }
+        aluno_id: { type: string }
+        profissional_utilizador_id: { type: string }
+        encarregado_utilizador_id: { type: string }
+        criado_em: { type: string, format: date-time }
+
+    Mensagem:
+      type: object
+      properties:
+        id: { type: string }
+        conversa_id: { type: string }
+        texto: { type: string }
+        enviada_por_mim: { type: boolean }
+        criado_em: { type: string, format: date-time }
+
+  parameters:
+    turmaId:
+      name: turma_id
+      in: path
+      required: true
+      schema: { type: string }
+    comunicadoId:
+      name: comunicado_id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    "400": { description: Pedido inválido, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "401":
+      description: Sem sessão válida
+      headers:
+        WWW-Authenticate: { schema: { type: string, example: Bearer } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } }
+    "403": { description: Sem permissão, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "404": { description: Não encontrado / não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "409": { description: Conflito, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "413": { description: Ficheiro ou pedido demasiado grande, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "415": { description: Content-Type não suportado, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    "503": { description: Serviço ou dependência indisponível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      tags: [monitorização]
+      responses:
+        "200":
+          description: Processo a correr
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: comunicados }
+                  application: { type: string, example: EduConecta }
+
+  /ready:
+    get:
+      summary: Readiness check — confirma ligação à Atlas
+      tags: [monitorização]
+      responses:
+        "200":
+          description: Ligação à base de dados ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+                  service: { type: string, example: comunicados }
+                  database: { type: string, example: connected }
+        "503":
+          description: Base de dados indisponível
+          content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } }
+
+  /turmas/{turma_id}/comunicados:
+    parameters: [{ $ref: "#/components/parameters/turmaId" }]
+    post:
+      summary: Publicar um comunicado
+      description: Só docente/educadora atribuídos à turma.
+      tags: [comunicados]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [titulo, texto]
+              properties:
+                titulo: { type: string, minLength: 1, maxLength: 150 }
+                texto: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        "201": { description: Comunicado criado, content: { application/json: { schema: { $ref: "#/components/schemas/Comunicado" } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+    get:
+      summary: Listar comunicados de uma turma
+      description: Qualquer perfil com acesso à turma (docente/educadora atribuídos, ou encarregado com educando lá).
+      tags: [comunicados]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: pagina
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+      responses:
+        "200":
+          description: Página de comunicados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  turma_id: { type: string }
+                  comunicados: { type: array, items: { $ref: "#/components/schemas/Comunicado" } }
+                  quantidade: { type: integer }
+                  pagina: { type: integer }
+                  limite: { type: integer, example: 20 }
+                  tem_mais: { type: boolean }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /turmas/{turma_id}/comunicados/{comunicado_id}/fotografias:
+    parameters:
+      - { $ref: "#/components/parameters/turmaId" }
+      - { $ref: "#/components/parameters/comunicadoId" }
+    post:
+      summary: Anexar uma fotografia a um comunicado
+      description: >
+        Só o autor do comunicado. A imagem é reencodada para JPEG (remove
+        EXIF, limita a 20 milhões de píxeis e 5MB depois de convertida).
+        Aceita JPEG, PNG ou WebP de entrada, não animados.
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [fotografia]
+              properties:
+                fotografia: { type: string, format: binary }
+      responses:
+        "201": { description: Fotografia guardada, content: { application/json: { schema: { $ref: "#/components/schemas/AnexoFotografia" } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: "Comunicado não existe ou não é editável por esta conta", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "413": { description: "Fotografia maior que 5MB", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+    get:
+      summary: Listar fotografias de um comunicado
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: antes_de
+          in: query
+          schema: { type: string }
+          description: Cursor de paginação (ObjectId).
+      responses:
+        "200":
+          description: Página de fotografias
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comunicado_id: { type: string }
+                  fotografias: { type: array, items: { $ref: "#/components/schemas/ItemAnexoListado" } }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 20 }
+                  tem_mais: { type: boolean }
+                  proximo_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /turmas/{turma_id}/comunicados/{comunicado_id}/fotografias/{fotografia_id}:
+    parameters:
+      - { $ref: "#/components/parameters/turmaId" }
+      - { $ref: "#/components/parameters/comunicadoId" }
+      - name: fotografia_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Ver/descarregar uma fotografia
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: "Com download=1, força Content-Disposition: attachment."
+      responses:
+        "200":
+          description: Binário JPEG
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /turmas/{turma_id}/comunicados/{comunicado_id}/videos:
+    parameters:
+      - { $ref: "#/components/parameters/turmaId" }
+      - { $ref: "#/components/parameters/comunicadoId" }
+    post:
+      summary: Anexar um vídeo a um comunicado
+      description: >
+        Só o autor do comunicado. Faz streaming do upload para disco (corta
+        ao ultrapassar 25MB) e valida o ficheiro com ffprobe: tem de ser MP4
+        H.264, com áudio AAC opcional, sem pistas adicionais.
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [video]
+              properties:
+                video: { type: string, format: binary }
+      responses:
+        "201": { description: Vídeo guardado, content: { application/json: { schema: { $ref: "#/components/schemas/AnexoVideo" } } } }
+        "400": { description: "Vídeo vazio, inválido ou análise excedeu 10s", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "413": { description: "Vídeo maior que 25MB", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { description: "BD indisponível ou ffprobe/armazenamento temporário indisponível", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+    get:
+      summary: Listar vídeos de um comunicado
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: antes_de
+          in: query
+          schema: { type: string }
+          description: Cursor de paginação (ObjectId).
+      responses:
+        "200":
+          description: Página de vídeos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comunicado_id: { type: string }
+                  videos: { type: array, items: { $ref: "#/components/schemas/ItemAnexoListado" } }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 20 }
+                  tem_mais: { type: boolean }
+                  proximo_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /turmas/{turma_id}/comunicados/{comunicado_id}/videos/{video_id}:
+    parameters:
+      - { $ref: "#/components/parameters/turmaId" }
+      - { $ref: "#/components/parameters/comunicadoId" }
+      - name: video_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Ver/descarregar um vídeo
+      tags: [anexos]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: "Com download=1, força Content-Disposition: attachment."
+      responses:
+        "200":
+          description: Binário MP4
+          content:
+            video/mp4: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { $ref: "#/components/responses/404" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /conversas:
+    post:
+      summary: Criar (ou recuperar) uma conversa
+      description: >
+        O id é o SHA-256 dos três participantes — pedir a mesma combinação
+        duas vezes é idempotente e devolve sempre a mesma conversa (200 na
+        segunda vez, 201 na primeira).
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aluno_id, profissional_utilizador_id, encarregado_utilizador_id]
+              properties:
+                aluno_id: { type: string }
+                profissional_utilizador_id: { type: string }
+                encarregado_utilizador_id: { type: string }
+      responses:
+        "200":
+          description: Conversa já existia (contexto igual)
+          content: { application/json: { schema: { type: object, properties: { conversa: { $ref: "#/components/schemas/Conversa" }, criada: { type: boolean, example: false } } } } }
+        "201":
+          description: Conversa criada
+          content: { application/json: { schema: { type: object, properties: { conversa: { $ref: "#/components/schemas/Conversa" }, criada: { type: boolean, example: true } } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: "Relação escolar não existe/não fecha", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "409": { description: "Conversa já existe com contexto diferente (colisão de hash)", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+    get:
+      summary: Listar as minhas conversas
+      description: Cada conversa é revalidada contra o escolar; as que já não são válidas são omitidas em silêncio (não abortam o pedido).
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: depois_de
+          in: query
+          schema: { type: string }
+          description: Cursor de paginação (id da conversa).
+      responses:
+        "200":
+          description: Página de conversas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversas:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Conversa"
+                        - type: object
+                          properties:
+                            meu_papel: { type: string, enum: [profissional, encarregado] }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 10 }
+                  tem_mais: { type: boolean }
+                  proximo_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /conversas/{conversa_id}/mensagens:
+    parameters:
+      - name: conversa_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+    post:
+      summary: Enviar uma mensagem
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto]
+              properties:
+                texto: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        "201": { description: Mensagem enviada, content: { application/json: { schema: { $ref: "#/components/schemas/Mensagem" } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: Conversa não existe/não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+    get:
+      summary: Listar mensagens de uma conversa
+      description: Mais recentes primeiro na query, devolvidas já em ordem cronológica.
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: antes_de
+          in: query
+          schema: { type: string }
+          description: Cursor de paginação (ObjectId da mensagem).
+      responses:
+        "200":
+          description: Página de mensagens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversa_id: { type: string }
+                  mensagens: { type: array, items: { $ref: "#/components/schemas/Mensagem" } }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 30 }
+                  tem_mais: { type: boolean }
+                  proximo_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: Conversa não existe/não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "503": { $ref: "#/components/responses/503" }

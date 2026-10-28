@@ -1,3 +1,5 @@
+"""Controller: rotas de gestão de encarregados de educação e ligação a contas de utilizador."""
+
 from bson import ObjectId
 from flask import g, jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -9,6 +11,7 @@ from utils.auth_client import obter_conta_para_associacao
 
 @bp.post("/encarregados")
 def criar_encarregado():
+    """Cria um registo de encarregado de educação (ainda sem conta de login associada)."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -62,6 +65,7 @@ def criar_encarregado():
 
 @bp.get("/encarregados")
 def listar_encarregados():
+    """Lista até 50 encarregados de educação."""
     try:
         documentos = modelo_encarregado.listar()
 
@@ -89,6 +93,7 @@ def listar_encarregados():
 
 @bp.get("/encarregados/<encarregado_id>/alunos")
 def listar_alunos_encarregado(encarregado_id):
+    """Lista os educandos de um encarregado (visão de admin, por id)."""
     import models.aluno as modelo_aluno
 
     if not ObjectId.is_valid(encarregado_id):
@@ -141,6 +146,14 @@ def listar_alunos_encarregado(encarregado_id):
 
 @bp.put("/encarregados/<encarregado_id>/utilizador")
 def associar_conta_encarregado(encarregado_id):
+    """Liga uma conta de utilizador (perfil 'encarregado', já criada no auth) a este
+    registo de encarregado.
+
+    Nota: esta rota já não está em PERMISSOES_PESSOAIS, por isso o
+    before_request (verificar_acesso_escolar) já só deixa passar admins —
+    esta verificação de perfil aqui dentro é redundante com essa, mas foi
+    mantida como está no código original (comportamento preservado tal e
+    qual durante o refactor para MVC, não foi limpa de propósito)."""
     if g.utilizador.get("perfil") != "admin":
         return jsonify({
             "error": "forbidden",

@@ -1,3 +1,9 @@
+"""Utilitário: formato de erro padrão da API e chamadas HTTP de serviço a
+serviço (auth/escolar), reenviando sempre o Authorization do pedido original
+do cliente — é essa cadeia de reenvio que faz a sessão do utilizador valer
+também nos outros serviços, sem um gateway central a fazer isso por eles.
+"""
+
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -6,6 +12,7 @@ from flask import jsonify, request
 
 
 def erro(codigo, mensagem, estado):
+    """Monta a resposta de erro no formato {error, message} usado em toda a API."""
     resposta = jsonify({
         "error": codigo,
         "message": mensagem,
@@ -18,6 +25,11 @@ def erro(codigo, mensagem, estado):
 
 
 def consultar_servico(url, metodo="GET", dados=None):
+    """Chama outro serviço interno (auth/escolar), propagando o Authorization
+    do pedido atual. Devolve (corpo_json, None) no sucesso, ou
+    (None, resposta_de_erro) já pronta a devolver ao cliente — traduz os
+    códigos HTTP típicos (401/403/404) e qualquer falha de rede/timeout
+    num 503 "dependency_unavailable", para nunca deixar a causa interna vazar."""
     headers = {
         "Authorization": request.headers.get("Authorization", ""),
         "Accept": "application/json",

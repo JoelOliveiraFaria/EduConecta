@@ -1,3 +1,9 @@
+"""Controller: rotas de gestão de turmas e das suas associações a alunos/profissionais.
+
+As rotas "/me/turmas..." (de um profissional sobre as suas próprias turmas)
+estão listadas em PERMISSOES_PESSOAIS; as restantes exigem admin.
+"""
+
 from bson import ObjectId
 from flask import g, jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -10,6 +16,7 @@ from utils.auth_client import consultar_conta_profissional_auth
 
 @bp.post("/turmas")
 def criar_turma():
+    """Cria uma turma. ano_letivo tem de ser "AAAA/AAAA" com dois anos consecutivos."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -94,6 +101,7 @@ def criar_turma():
 
 @bp.get("/turmas")
 def listar_turmas():
+    """Lista até 50 turmas."""
     try:
         documentos = modelo_turma.listar()
 
@@ -121,6 +129,7 @@ def listar_turmas():
 
 @bp.get("/turmas/<turma_id>/alunos")
 def listar_alunos_turma(turma_id):
+    """Lista os alunos de uma turma (visão de admin, qualquer turma)."""
     import models.aluno as modelo_aluno
 
     if not ObjectId.is_valid(turma_id):
@@ -169,6 +178,12 @@ def listar_alunos_turma(turma_id):
 
 @bp.put("/turmas/<turma_id>/profissionais/<profissional_id>")
 def associar_profissional_turma(turma_id, profissional_id):
+    """Atribui um profissional a uma turma.
+
+    Antes de gravar, confirma junto do auth que a conta ligada ao
+    profissional está ativa e que o perfil da conta ainda bate certo com o
+    perfil guardado no registo profissional (a conta pode ter mudado de
+    perfil no auth depois do registo ter sido criado aqui)."""
     if not ObjectId.is_valid(turma_id):
         return jsonify({
             "error": "invalid_class_id",
@@ -246,6 +261,7 @@ def associar_profissional_turma(turma_id, profissional_id):
 
 @bp.get("/me/turmas")
 def listar_minhas_turmas():
+    """Lista as turmas atribuídas ao profissional autenticado (rota pessoal)."""
     profissional, erro = obter_profissional_da_sessao()
 
     if erro is not None:
@@ -283,6 +299,9 @@ def listar_minhas_turmas():
 
 @bp.get("/me/turmas/<turma_id>/alunos")
 def listar_alunos_minha_turma(turma_id):
+    """Lista os alunos de uma turma do profissional autenticado — devolve 404
+    (não 403) se a turma existir mas não lhe pertencer, para não revelar a
+    outros utilizadores quais turmas existem."""
     import models.aluno as modelo_aluno
 
     if not ObjectId.is_valid(turma_id):

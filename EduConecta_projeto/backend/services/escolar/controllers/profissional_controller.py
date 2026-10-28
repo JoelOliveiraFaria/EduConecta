@@ -1,3 +1,5 @@
+"""Controller: rotas de gestão de profissionais (docentes, educadoras, auxiliares)."""
+
 from bson import ObjectId
 from flask import jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -9,6 +11,11 @@ from utils.auth_client import consultar_conta_profissional_auth
 
 @bp.post("/profissionais")
 def criar_profissional():
+    """Cria o registo de profissional ligado a uma conta já existente no auth.
+
+    Confirma junto do auth que a conta tem perfil docente/educadora/auxiliar
+    e está ativa antes de gravar — o registo copia nome e perfil da conta
+    no momento da criação (não fica sincronizado automaticamente depois)."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -81,6 +88,7 @@ def criar_profissional():
 
 @bp.get("/profissionais")
 def listar_profissionais():
+    """Lista até 50 profissionais."""
     try:
         documentos = modelo_profissional.listar()
 

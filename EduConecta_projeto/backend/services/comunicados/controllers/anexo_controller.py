@@ -14,12 +14,22 @@ from utils.acesso import verificar_acesso
 from utils.service_client import erro
 from utils.video import analisar_mp4
 
+"""Controller: listar, descarregar e carregar anexos (fotografias e vídeos)
+de um comunicado. `_listar`/`_obter` são partilhadas pelos dois tipos — só
+`carregar_video` não tem equivalente para fotografias, porque o upload de
+fotografia fica em comunicado_controller.anexar_fotografia (feito antes de
+este controller existir; mantido lá para não duplicar/mudar comportamento).
+"""
+
 bp = Blueprint("anexos", __name__)
 
 BASE = "/turmas/<turma_id>/comunicados/<comunicado_id>"
 
 
 def _autorizar(turma_id, comunicado_id, publicar=False):
+    """Confirma acesso à turma (verificar_acesso) e que o comunicado existe e
+    é acessível (ou editável, se publicar=True) por esta conta. Devolve
+    (comunicado_id_canónico, None) no sucesso, ou (None, erro) na falha."""
     falha = verificar_acesso(turma_id, publicar=publicar)
 
     if falha is not None:
@@ -45,6 +55,8 @@ def _autorizar(turma_id, comunicado_id, publicar=False):
 
 
 def _listar(turma_id, comunicado_id, tipo):
+    """Lista metadados dos anexos de um comunicado (sem o binário), com URLs
+    prontas para GET direto. `tipo` é "fotografias" ou "videos"."""
     cid, falha = _autorizar(turma_id, comunicado_id)
 
     if falha is not None:
@@ -96,6 +108,9 @@ def _listar(turma_id, comunicado_id, tipo):
 
 
 def _obter(turma_id, comunicado_id, anexo_id, tipo):
+    """Lê o binário de um anexo do GridFS e devolve-o como ficheiro (streaming
+    via send_file), confirmando o tamanho lido contra o tamanho declarado
+    (`ficheiro.length`) para não devolver um ficheiro truncado em silêncio."""
     cid, falha = _autorizar(turma_id, comunicado_id)
 
     if falha is not None:
@@ -144,26 +159,39 @@ def _obter(turma_id, comunicado_id, anexo_id, tipo):
 
 @bp.get(BASE + "/fotografias")
 def listar_fotos(turma_id, comunicado_id):
+    """Lista as fotografias anexadas a um comunicado."""
     return _listar(turma_id, comunicado_id, "fotografias")
 
 
 @bp.get(BASE + "/fotografias/<fotografia_id>")
 def obter_foto(turma_id, comunicado_id, fotografia_id):
+    """Descarrega/mostra uma fotografia concreta."""
     return _obter(turma_id, comunicado_id, fotografia_id, "fotografias")
 
 
 @bp.get(BASE + "/videos")
 def listar_videos(turma_id, comunicado_id):
+    """Lista os vídeos anexados a um comunicado."""
     return _listar(turma_id, comunicado_id, "videos")
 
 
 @bp.get(BASE + "/videos/<video_id>")
 def obter_video(turma_id, comunicado_id, video_id):
+    """Descarrega/mostra um vídeo concreto."""
     return _obter(turma_id, comunicado_id, video_id, "videos")
 
 
 @bp.post(BASE + "/videos")
 def carregar_video(turma_id, comunicado_id):
+    """Recebe, valida e guarda um vídeo anexado a um comunicado.
+
+    Faz streaming do upload para um ficheiro temporário em blocos de 64KB,
+    cortando assim que ultrapassa MAX_VIDEO_BYTES — evita carregar o vídeo
+    inteiro em memória só para descobrir depois que é grande demais. Só
+    depois de gravado em disco é que o ffprobe (utils/video.analisar_mp4)
+    valida o conteúdo; o ficheiro temporário é sempre apagado no fim (bloco
+    `with`), mesmo se a validação ou a gravação no GridFS falharem.
+    """
     cid, falha = _autorizar(turma_id, comunicado_id, publicar=True)
 
     if falha is not None:

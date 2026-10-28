@@ -1,3 +1,9 @@
+"""Ligação ao MongoDB Atlas (partilhado pelos 5 microsserviços).
+
+Expõe `database` (a base de dados deste serviço) e `registos` (a coleção
+`assiduidade`), reutilizados pelos models. Não contém lógica de negócio.
+"""
+
 import os
 
 from pymongo import MongoClient

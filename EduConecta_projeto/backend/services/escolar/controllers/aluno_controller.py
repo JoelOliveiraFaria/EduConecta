@@ -1,3 +1,9 @@
+"""Controller: rotas de gestão de alunos (CRUD, associação a turma/encarregados).
+
+Todas as rotas daqui passam primeiro por `verificar_acesso_escolar`
+(controllers/blueprint.py) — só exigem admin, exceto /me/alunos.
+"""
+
 from bson import ObjectId
 from flask import g, jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -10,6 +16,7 @@ from controllers.blueprint import bp
 
 @bp.get("/alunos")
 def listar_alunos():
+    """Lista até 50 alunos."""
     try:
         documentos = modelo_aluno.listar()
 
@@ -37,6 +44,7 @@ def listar_alunos():
 
 @bp.post("/alunos")
 def criar_aluno():
+    """Cria um aluno (nome + numero_processo, ambos obrigatórios e únicos por processo)."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -98,6 +106,7 @@ def criar_aluno():
 
 @bp.get("/alunos/<aluno_id>")
 def obter_aluno(aluno_id):
+    """Devolve um aluno pelo id."""
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
@@ -128,6 +137,7 @@ def obter_aluno(aluno_id):
 
 @bp.patch("/alunos/<aluno_id>")
 def atualizar_aluno(aluno_id):
+    """Atualiza parcialmente nome e/ou numero_processo de um aluno."""
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
@@ -216,6 +226,7 @@ def atualizar_aluno(aluno_id):
 
 @bp.put("/alunos/<aluno_id>/turma")
 def associar_aluno_turma(aluno_id):
+    """Atribui (ou substitui) a turma de um aluno."""
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
@@ -287,6 +298,7 @@ def associar_aluno_turma(aluno_id):
 
 @bp.put("/alunos/<aluno_id>/encarregados/<encarregado_id>")
 def associar_encarregado_aluno(aluno_id, encarregado_id):
+    """Liga um encarregado de educação a um aluno (um aluno pode ter vários)."""
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
@@ -337,6 +349,7 @@ def associar_encarregado_aluno(aluno_id, encarregado_id):
 
 @bp.get("/alunos/<aluno_id>/encarregados")
 def listar_encarregados_aluno(aluno_id):
+    """Lista os encarregados de educação associados a um aluno."""
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
@@ -382,6 +395,7 @@ def listar_encarregados_aluno(aluno_id):
 
 @bp.get("/me/alunos")
 def listar_meus_alunos():
+    """Lista os educandos do encarregado autenticado (rota pessoal, não precisa de admin)."""
     utilizador_id = ObjectId(g.utilizador["id"])
 
     try:

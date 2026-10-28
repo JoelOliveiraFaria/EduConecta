@@ -8,10 +8,26 @@ import models.conversa as modelo_conversa
 from utils.acesso import obter_conta_chat, validar_relacao_chat
 from utils.service_client import erro
 
+"""Controller: conversas e mensagens entre um profissional (docente/educadora)
+e um encarregado de educação, sobre um aluno em concreto.
+
+A autorização nunca confia só no `conversa_id` — toda vez que uma conversa
+é acedida, a relação aluno/profissional/encarregado é revalidada contra o
+serviço escolar (ver utils/acesso.validar_relacao_chat), para a conversa
+deixar de ser acessível automaticamente se essa relação deixar de existir
+(ex: aluno mudou de turma, profissional deixou de estar atribuído a ela).
+"""
+
 bp = Blueprint("chat", __name__)
 
 
 def obter_conversa_autorizada(conversa_id):
+    """Resolve uma conversa pelo id e confirma, em dois passos, que quem pede
+    tem mesmo acesso a ela: (1) a conta é um dos dois participantes guardados
+    no documento da conversa; (2) a relação continua válida agora, revalidada
+    no escolar (não só "era válida quando a conversa foi criada").
+    Devolve (conversa, conta, None) no sucesso, ou (None, None, erro) na falha.
+    """
     conta, falha = obter_conta_chat()
 
     if falha is not None:
@@ -89,6 +105,16 @@ def obter_conversa_autorizada(conversa_id):
 
 @bp.post("/conversas")
 def criar_conversa():
+    """Cria (ou recupera, se já existir) a conversa entre um aluno, um
+    profissional e um encarregado.
+
+    O id da conversa é o SHA-256 dos três ids juntos — não um ObjectId
+    aleatório — por isso pedir a conversa dos mesmos três participantes duas
+    vezes dá sempre o mesmo id, e criar é naturalmente idempotente: se já
+    existir (DuplicateKeyError), basta ir buscá-la e confirmar que o
+    contexto bate certo, sem inserir duplicados nem precisar de uma consulta
+    prévia "existe ou não existe" antes de cada criação.
+    """
     conta, falha = obter_conta_chat()
 
     if falha is not None:
@@ -193,6 +219,7 @@ def criar_conversa():
 
 @bp.post("/conversas/<conversa_id>/mensagens")
 def enviar_mensagem(conversa_id):
+    """Envia uma mensagem de texto para uma conversa já validada."""
     conversa, conta, falha = obter_conversa_autorizada(
         conversa_id
     )
@@ -250,6 +277,8 @@ def enviar_mensagem(conversa_id):
 
 @bp.get("/conversas/<conversa_id>/mensagens")
 def listar_mensagens(conversa_id):
+    """Lista mensagens de uma conversa (mais recentes primeiro, paginadas por
+    cursor `antes_de`), devolvidas já por ordem cronológica (reversed)."""
     conversa, conta, falha = obter_conversa_autorizada(
         conversa_id
     )
@@ -326,6 +355,13 @@ def listar_mensagens(conversa_id):
 
 @bp.get("/conversas")
 def listar_conversas():
+    """Lista as conversas em que a conta autenticada participa.
+
+    Cada conversa listada é revalidada individualmente contra o escolar
+    (validar_relacao_chat) antes de entrar na resposta — uma conversa cuja
+    relação já não é válida (403/404) é simplesmente omitida da lista em vez
+    de rebentar o pedido todo; só uma falha de infraestrutura (503) aborta.
+    """
     conta, falha = obter_conta_chat()
 
     if falha is not None:

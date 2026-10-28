@@ -1,3 +1,5 @@
+"""Ligação ao MongoDB Atlas (base de dados escolar_dc) — usada por todos os models."""
+
 import os
 
 from pymongo import MongoClient

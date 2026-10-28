@@ -1,3 +1,12 @@
+"""Utilitário: verificações de autorização que precisam de perguntar aos
+outros serviços (auth para a sessão, escolar para as relações turma/aluno),
+usadas pelos três controllers deste serviço (comunicados, anexos e chat).
+
+Nada aqui acede à base de dados local — só confirma, via HTTP interno,
+"quem é esta pessoa" e "a que é que ela tem direito", antes dos controllers
+seguirem para os models.
+"""
+
 from bson import ObjectId
 from flask import g
 
@@ -6,6 +15,18 @@ from utils.service_client import consultar_servico, erro
 
 
 def verificar_acesso(turma_id, publicar=False):
+    """Confirma que a conta autenticada pode ver (ou, se publicar=True,
+    publicar em) os comunicados de uma turma, e deixa o resultado em
+    g.utilizador_id / g.turma_id para o controller usar a seguir.
+
+    Regras por perfil:
+      - docente/educadora (PERFIS_PUBLICACAO): só precisam de estar
+        atribuídos à turma (confirmado via GET /me/turmas/<id>/alunos no
+        escolar) — podem ler e publicar.
+      - encarregado, só para leitura (publicar=False): tem de ter um
+        educando matriculado nessa turma (confirmado via GET /me/alunos).
+      - qualquer outro perfil, ou um encarregado a tentar publicar: 403.
+    """
     if not ObjectId.is_valid(turma_id):
         return erro(
             "invalid_class_id",
@@ -93,6 +114,9 @@ def verificar_acesso(turma_id, publicar=False):
 
 
 def obter_conta_chat():
+    """Valida a sessão para uso no chat: conta ativa e com um dos três perfis
+    que podem participar (docente, educadora, encarregado — note-se que
+    auxiliar fica de fora de propósito, tal como em models/profissional.py)."""
     conta, falha = consultar_servico(f"{AUTH_URL}/me")
 
     if falha is not None:
@@ -118,6 +142,26 @@ def obter_conta_chat():
 
 
 def validar_relacao_chat(conta, contexto):
+    """Confirma que a conta autenticada é mesmo um dos participantes
+    nomeados em `contexto`, e que a relação aluno/profissional/encarregado é
+    real (ligação de turma, matrícula, atribuição) — perguntando ao serviço
+    escolar (POST /me/chat/validar), não aos dados locais deste serviço, já
+    que quem sabe essas relações é o escolar.
+
+    Duas camadas de verificação, por ordem (a segunda só corre se a
+    primeira passar, para não gastar um pedido HTTP com algo já recusável
+    localmente):
+      1. a conta tem de corresponder ao participante do seu próprio papel
+         em `contexto` (um docente só pode validar-se a si mesmo como
+         profissional, nunca personificar outro);
+      2. o escolar confirma que aluno, profissional e encarregado estão de
+         facto ligados entre si (mesma turma) — e a resposta é conferida
+         campo a campo contra o `contexto` pedido, para recusar qualquer
+         adulteração caso o escolar alguma vez devolva algo inesperado.
+
+    Devolve (validacao, None) no sucesso — `validacao` inclui o turma_id
+    resolvido pelo escolar, usado depois para etiquetar a conversa.
+    """
     if conta["perfil"] in {"docente", "educadora"}:
         participante = contexto["profissional_utilizador_id"]
     else:

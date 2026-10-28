@@ -1,3 +1,9 @@
+"""Utilitário: emissão e validação de tokens JWT de sessão.
+
+Usado pelos controllers para gerar o token no login e para descodificá-lo
+em todas as rotas protegidas (/me, /password/alterar, rotas de admin).
+"""
+
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -8,11 +14,13 @@ from quart import jsonify
 
 jwt_secret = os.environ["JWT_SECRET_KEY"]
 
+# Falha cedo no arranque do serviço em vez de emitir tokens fracos.
 if len(jwt_secret) < 32:
     raise RuntimeError("A chave JWT deve ter pelo menos 32 caracteres.")
 
 
 def gerar_token(utilizador_id):
+    """Cria um JWT HS256 válido por 15 minutos, com jti único por token."""
     agora = datetime.now(timezone.utc)
     return jwt.encode(
         {
@@ -29,6 +37,12 @@ def gerar_token(utilizador_id):
 
 
 def descodificar_token(autorizacao):
+    """Valida o cabeçalho Authorization: Bearer <token>.
+
+    Devolve (utilizador_id, None) se válido, ou (None, resposta_erro) — uma
+    tupla (jsonify(...), status, headers) pronta a devolver diretamente pelo
+    controller — para token em falta, expirado ou inválido.
+    """
     partes = autorizacao.split()
 
     if len(partes) != 2 or partes[0].lower() != "bearer":

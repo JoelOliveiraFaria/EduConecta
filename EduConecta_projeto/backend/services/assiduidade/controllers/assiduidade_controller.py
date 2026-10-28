@@ -1,3 +1,11 @@
+"""Controller: rotas HTTP de assiduidade — validam o pedido, delegam a
+lógica de dados/autorização ao `models.assiduidade` e formatam a resposta.
+
+Autenticação e permissão por rota (quem pode chamar o quê) já foram
+decididas no `before_request` de `app.py`; aqui assume-se que `g.conta_id`
+existe e que o perfil já tem acesso de princípio à operação.
+"""
+
 from datetime import timedelta
 
 from bson import ObjectId
@@ -12,6 +20,14 @@ bp = Blueprint("assiduidade", __name__)
 
 @bp.get("/turmas/<turma_id>/assiduidade")
 def consultar_turma(turma_id):
+    """Lista a assiduidade de todos os alunos de uma turma num dia.
+
+    Só acessível a docente/educadora (ver `permissoes` em `app.py`), e só
+    para turmas às quais o profissional autenticado está associado — essa
+    verificação acontece em `modelo.alunos_autorizados`, que consulta o
+    serviço `escolar`. Devolve também uma `contagem` por estado, útil para
+    um resumo rápido no frontend (ex. "3 presentes, 1 falta, 2 por marcar").
+    """
     if set(request.args) != {"data"} or len(request.args.getlist("data")) != 1:
         return erro("invalid_query", "Envia apenas data=AAAA-MM-DD.", 400)
     try:
@@ -41,6 +57,13 @@ def consultar_turma(turma_id):
 
 @bp.put("/turmas/<turma_id>/alunos/<aluno_id>/assiduidade/<dia>")
 def marcar(turma_id, aluno_id, dia):
+    """Marca o estado de assiduidade de um aluno num dia (presente/falta/por_marcar).
+
+    Exige `versao` no corpo para controlo de concorrência otimista: se
+    outra pessoa já tiver alterado a marcação entretanto, `modelo.marcar_estado`
+    devolve None e respondemos 409, obrigando o cliente a reconsultar antes
+    de tentar outra vez (evita perder uma alteração concorrente em silêncio).
+    """
     if not ObjectId.is_valid(aluno_id):
         return erro("invalid_student_id", "Identificador de aluno inválido.", 400)
     aid = str(ObjectId(aluno_id))
@@ -75,6 +98,14 @@ def marcar(turma_id, aluno_id, dia):
 
 @bp.get("/alunos/<aluno_id>/assiduidade")
 def consultar_educando(aluno_id):
+    """Histórico de assiduidade de um educando, visto pelo encarregado de educação.
+
+    Só devolve dias dentro de um intervalo de no máximo 31 dias (`inicio`
+    a `fim` inclusive) para limitar o tamanho da resposta. Confirma que o
+    aluno pertence mesmo a este encarregado consultando `GET /me/alunos`
+    no `escolar`, com a mesma cautela de `alunos_autorizados` quanto à
+    lista poder estar incompleta pelo limite de paginação.
+    """
     if not ObjectId.is_valid(aluno_id):
         return erro("invalid_student_id", "Identificador de aluno inválido.", 400)
     aid = str(ObjectId(aluno_id))

@@ -1,3 +1,10 @@
+"""Controller: rotas HTTP do Diário (registo diário de acompanhamento dos alunos).
+
+Toda a validação de input e a decisão de quem pode aceder a quê vive aqui
+(delegada em utils.acesso para os detalhes de comunicação com auth/escolar);
+o acesso aos dados fica em models/registo.py.
+"""
+
 from datetime import date, datetime, timezone
 
 from bson import ObjectId
@@ -13,12 +20,22 @@ bp = Blueprint("diario", __name__)
 
 @bp.after_request
 def impedir_cache(resposta):
+    """Os registos do Diário são dados pessoais sensíveis — nunca ficam em cache do cliente."""
     resposta.headers["Cache-Control"] = "no-store"
     return resposta
 
 
 @bp.post("/turmas/<turma_id>/alunos/<aluno_id>/diario")
 def criar_registo(turma_id, aluno_id):
+    """Cria o registo diário de um aluno numa data.
+
+    Exige que quem faz o pedido seja um profissional (docente/educadora/
+    auxiliar) com acesso a essa turma e aluno (ver `verificar_acesso`).
+    Todos os campos de texto são obrigatórios no payload, mas pelo menos um
+    tem de ter conteúdo real (não vazio). O `_id` do documento é
+    `aluno_id:data`, o que torna duplicados (mesmo aluno, mesma data)
+    impossíveis a nível da base de dados.
+    """
     falha = verificar_acesso(turma_id, aluno_id)
 
     if falha is not None:
@@ -116,6 +133,11 @@ def criar_registo(turma_id, aluno_id):
 
 @bp.get("/turmas/<turma_id>/alunos/<aluno_id>/diario")
 def listar_registos(turma_id, aluno_id):
+    """Lista os registos de um aluno numa turma (visão do profissional).
+
+    Mesma verificação de acesso que a criação — só profissionais atribuídos
+    à turma conseguem ver estes registos.
+    """
     falha = verificar_acesso(turma_id, aluno_id)
 
     if falha is not None:
@@ -147,6 +169,15 @@ def listar_registos(turma_id, aluno_id):
 
 @bp.get("/me/alunos/<aluno_id>/diario")
 def listar_diario_meu_educando(aluno_id):
+    """Lista o Diário de um educando, do ponto de vista do encarregado de educação.
+
+    Não recebe turma_id no URL — em vez disso, confirma a relação em duas
+    chamadas ao `escolar` (/me/alunos): o aluno tem de aparecer na lista de
+    educandos de quem está autenticado, e a turma usada na query vem daí,
+    nunca do cliente. O campo `criado_por` é removido da resposta: é
+    informação interna (qual profissional escreveu o registo), não é
+    relevante nem deve ser exposta ao encarregado.
+    """
     if not ObjectId.is_valid(aluno_id):
         return erro(
             "invalid_student_id",
@@ -252,6 +283,12 @@ def listar_diario_meu_educando(aluno_id):
 
 @bp.patch("/turmas/<turma_id>/alunos/<aluno_id>/diario/<data_registo>")
 def editar_registo(turma_id, aluno_id, data_registo):
+    """Edita um ou mais campos de texto de um registo já existente.
+
+    Além da verificação de acesso à turma/aluno, o model só atualiza o
+    documento se `criado_por` corresponder a quem está autenticado — um
+    profissional não pode editar o registo escrito por outro.
+    """
     falha = verificar_acesso(turma_id, aluno_id)
 
     if falha is not None:

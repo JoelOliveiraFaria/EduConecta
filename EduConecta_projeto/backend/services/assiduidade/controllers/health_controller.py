@@ -1,3 +1,7 @@
+"""Controller: endpoints de diagnóstico, isolados num blueprint próprio para
+ficarem fora da verificação de autenticação em `app.py` (que exclui
+explicitamente "health.health" e "health.ready")."""
+
 from flask import Blueprint, jsonify
 from pymongo.errors import PyMongoError
 
@@ -9,11 +13,13 @@ bp = Blueprint("health", __name__)
 
 @bp.get("/health")
 def health():
+    """Liveness check simples — não toca na base de dados."""
     return jsonify({"status": "ok", "service": "assiduidade"}), 200
 
 
 @bp.get("/ready")
 def ready():
+    """Readiness check — confirma que a ligação à Atlas está a responder."""
     try:
         database.list_collection_names()
     except PyMongoError:

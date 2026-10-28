@@ -1,3 +1,5 @@
+"""Model: acesso aos dados da coleção `turmas` — sem validação nem formatação de resposta."""
+
 from bson import ObjectId
 from pymongo import ReturnDocument
 
@@ -7,12 +9,14 @@ colecao = database["turmas"]
 
 
 def criar(nome, ano_letivo):
+    """Insere uma turma nova; devolve (id gerado, documento inserido)."""
     turma = {"nome": nome, "ano_letivo": ano_letivo}
     resultado = colecao.insert_one(turma)
     return resultado.inserted_id, turma
 
 
 def listar():
+    """Até 50 turmas, mais recentes (ano letivo) primeiro, depois por nome."""
     return (
         colecao
         .find({}, {"nome": 1, "ano_letivo": 1})
@@ -22,6 +26,7 @@ def listar():
 
 
 def obter(turma_id):
+    """Devolve uma turma pelo id, ou None se não existir."""
     return colecao.find_one(
         {"_id": ObjectId(turma_id)},
         {"nome": 1, "ano_letivo": 1},
@@ -29,6 +34,7 @@ def obter(turma_id):
 
 
 def adicionar_profissional(turma_id, profissional_id):
+    """Associa um profissional à turma (idempotente: $addToSet não duplica)."""
     return colecao.find_one_and_update(
         {"_id": ObjectId(turma_id)},
         {"$addToSet": {"profissionais_ids": profissional_id}},
@@ -39,6 +45,7 @@ def adicionar_profissional(turma_id, profissional_id):
 
 
 def listar_por_profissional(profissional_id):
+    """Turmas atribuídas a um profissional (até 50) — usado em /me/turmas."""
     return (
         colecao
         .find(
@@ -51,6 +58,9 @@ def listar_por_profissional(profissional_id):
 
 
 def obter_atribuida_ao_profissional(turma_id, profissional_id):
+    """Devolve a turma só se este profissional estiver mesmo atribuído a ela
+    (filtra pelos dois campos na própria query, em vez de buscar e comparar
+    depois — garante que ninguém vê turmas que não são suas)."""
     return colecao.find_one(
         {"_id": ObjectId(turma_id), "profissionais_ids": profissional_id},
         {"nome": 1, "ano_letivo": 1},
@@ -58,6 +68,7 @@ def obter_atribuida_ao_profissional(turma_id, profissional_id):
 
 
 def obter_para_chat(turma_id, profissional_id):
+    """Confirma que a turma existe e tem este profissional atribuído; usado na validação de chat."""
     return colecao.find_one(
         {"_id": turma_id, "profissionais_ids": profissional_id},
         {"_id": 1},

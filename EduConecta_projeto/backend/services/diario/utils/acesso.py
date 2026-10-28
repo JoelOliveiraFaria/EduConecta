@@ -1,3 +1,10 @@
+"""Utilitário: comunicação com os serviços auth e escolar.
+
+O diario não tem a sua própria noção de "quem pode o quê" — pergunta sempre
+ao auth quem está autenticado e ao escolar se essa pessoa tem acesso à
+turma/aluno em causa. Nenhuma lógica de negócio do diario vive aqui.
+"""
+
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -9,6 +16,8 @@ from db import AUTH_URL, SCHOOL_URL
 
 
 def erro(codigo, mensagem, estado):
+    """Monta uma resposta de erro JSON consistente; acrescenta o cabeçalho
+    WWW-Authenticate quando o estado é 401, como o protocolo HTTP espera."""
     resposta = jsonify({
         "error": codigo,
         "message": mensagem,
@@ -21,6 +30,13 @@ def erro(codigo, mensagem, estado):
 
 
 def consultar_servico(url):
+    """Chama um endpoint interno de outro serviço, reenviando o cabeçalho
+    Authorization do pedido original (propaga a sessão do utilizador).
+
+    Devolve (dados, None) em caso de sucesso, ou (None, resposta_de_erro) já
+    pronta a devolver ao cliente — os códigos HTTP do serviço remoto são
+    traduzidos para mensagens do diario, sem nunca mostrar detalhes internos.
+    """
     pedido = Request(
         url,
         headers={
@@ -75,6 +91,16 @@ def consultar_servico(url):
 
 
 def verificar_acesso(turma_id, aluno_id):
+    """Confirma que quem está autenticado pode escrever/ler o Diário deste par
+    turma+aluno.
+
+    Dois passos sequenciais: (1) o auth confirma que a conta está ativa e tem
+    perfil profissional (docente/educadora/auxiliar); (2) o escolar confirma
+    que esse profissional está mesmo atribuído a esta turma e que o aluno
+    pertence a ela. Como efeito colateral, guarda o id do utilizador em
+    `g.utilizador_id` para as rotas usarem (ex: campo `criado_por`).
+    Devolve None se o acesso é permitido, ou a resposta de erro a devolver.
+    """
     if not ObjectId.is_valid(turma_id):
         return erro(
             "invalid_class_id",

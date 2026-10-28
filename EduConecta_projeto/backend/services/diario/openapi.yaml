@@ -1,0 +1,365 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — diario
+  version: "1.0.0"
+  description: >
+    Registo diário de acompanhamento dos alunos (alimentação, sono, higiene,
+    atividades, observações). Não tem noção própria de permissões: valida
+    sempre a sessão junto do serviço `auth` e o acesso à turma/aluno junto do
+    serviço `escolar` antes de ler ou escrever qualquer registo.
+servers:
+  - url: /
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Erro:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+
+    Registo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "6ae25726f48244f8a4852d9b:2026-03-05"
+        aluno_id:
+          type: string
+        turma_id:
+          type: string
+        data:
+          type: string
+          format: date
+          example: "2026-03-05"
+        alimentacao:
+          type: string
+        sono:
+          type: string
+        higiene:
+          type: string
+        atividades:
+          type: string
+        observacoes:
+          type: string
+        criado_por:
+          type: string
+          description: id do utilizador (profissional) que criou o registo.
+        criado_em:
+          type: string
+          format: date-time
+        atualizado_em:
+          type: string
+          format: date-time
+        atualizado_por:
+          type: string
+
+  responses:
+    NaoAutenticado:
+      description: Falta ou é inválido o token Authorization Bearer.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
+          example: { error: authentication_required, message: "Sessão inválida ou expirada. Inicia sessão novamente." }
+    Proibido:
+      description: A conta autenticada não tem permissão para esta operação.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
+          example: { error: forbidden, message: "A conta não tem autorização para esta operação." }
+    DependenciaIndisponivel:
+      description: Não foi possível validar o pedido junto do auth/escolar, ou a BD está em baixo.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
+          example: { error: dependency_unavailable, message: "Não foi possível validar o acesso. Tenta novamente." }
+
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      description: Responde sempre 200 se o processo estiver a correr. Sem autenticação.
+      responses:
+        "200":
+          description: Serviço vivo.
+          content:
+            application/json:
+              example: { status: ok, service: diario, application: EduConecta }
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: Só dá 200 se a ligação ao MongoDB Atlas estiver mesmo a funcionar. Sem autenticação.
+      responses:
+        "200":
+          description: Pronto.
+          content:
+            application/json:
+              example: { status: ready, service: diario, database: connected }
+        "503":
+          description: Base de dados indisponível.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+              example: { error: database_unavailable, message: "A base de dados do Diário não está disponível." }
+
+  /turmas/{turma_id}/alunos/{aluno_id}/diario:
+    post:
+      summary: Criar o registo diário de um aluno numa data
+      description: >
+        Só profissionais (docente/educadora/auxiliar) atribuídos a esta turma,
+        com este aluno na turma, podem criar registos. Todos os campos de
+        texto são obrigatórios no corpo, mas pelo menos um tem de ter
+        conteúdo. O id do documento é `aluno_id:data` — duplicados (mesmo
+        aluno, mesma data) são impossíveis a nível da base de dados.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, alimentacao, sono, higiene, atividades, observacoes]
+              properties:
+                data: { type: string, format: date, example: "2026-03-05" }
+                alimentacao: { type: string, maxLength: 2000 }
+                sono: { type: string, maxLength: 2000 }
+                higiene: { type: string, maxLength: 2000 }
+                atividades: { type: string, maxLength: 2000 }
+                observacoes: { type: string, maxLength: 2000 }
+      responses:
+        "201":
+          description: Registo criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registo"
+        "400":
+          description: >
+            turma/aluno inválidos, corpo com campos a mais/a menos, data mal
+            formatada, texto demasiado longo, ou todos os campos vazios.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
+        "404":
+          description: O aluno não foi encontrado entre os alunos acessíveis da turma.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "409":
+          description: Já existe um registo para este aluno nesta data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "415":
+          description: Content-Type diferente de application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "503":
+          $ref: "#/components/responses/DependenciaIndisponivel"
+
+    get:
+      summary: Listar os registos de um aluno numa turma (visão do profissional)
+      description: Mesma verificação de acesso que a criação — até 31 registos, mais recentes primeiro.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de registos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Registo" }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 31 }
+        "400":
+          description: Identificador de turma ou aluno inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
+        "404":
+          description: O aluno não foi encontrado entre os alunos acessíveis da turma.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "503":
+          $ref: "#/components/responses/DependenciaIndisponivel"
+
+  /me/alunos/{aluno_id}/diario:
+    get:
+      summary: Listar o Diário de um educando (visão do encarregado de educação)
+      description: >
+        Só para contas com perfil `encarregado`. A relação é confirmada em
+        duas chamadas ao `escolar` (`/me/alunos`) — o aluno tem de aparecer na
+        lista de educandos de quem está autenticado; a turma usada na query
+        vem dessa resposta, nunca do cliente. O campo `criado_por` não
+        aparece nesta resposta (não é informação relevante para o encarregado).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Diário do educando.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aluno:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                      turma_id: { type: string }
+                  registos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Registo" }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 31 }
+        "400":
+          description: Identificador de aluno inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "401":
+          description: Sessão inválida, expirada, ou não foi possível validar a conta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "403":
+          description: A conta autenticada não tem perfil encarregado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "404":
+          description: Aluno não encontrado/não associado à conta, ou sem turma válida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "503":
+          $ref: "#/components/responses/DependenciaIndisponivel"
+
+  /turmas/{turma_id}/alunos/{aluno_id}/diario/{data_registo}:
+    patch:
+      summary: Editar um registo diário já existente
+      description: >
+        Só quem criou o registo (`criado_por`) o pode editar, além de precisar
+        de acesso à turma/aluno. Aceita um ou mais dos campos de texto.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: data_registo
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Um ou mais destes campos, pelo menos um com texto.
+              properties:
+                alimentacao: { type: string, maxLength: 2000 }
+                sono: { type: string, maxLength: 2000 }
+                higiene: { type: string, maxLength: 2000 }
+                atividades: { type: string, maxLength: 2000 }
+                observacoes: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Registo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registo"
+        "400":
+          description: Turma/aluno inválidos, data mal formatada, corpo inválido, ou nenhum campo com texto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
+        "404":
+          description: O registo não existe, ou não pode ser editado por esta conta (não é o autor original).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "415":
+          description: Content-Type diferente de application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "503":
+          $ref: "#/components/responses/DependenciaIndisponivel"

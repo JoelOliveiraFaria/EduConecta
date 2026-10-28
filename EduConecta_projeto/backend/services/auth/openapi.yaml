@@ -1,0 +1,487 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — auth
+  version: "1.0.0"
+  description: >
+    Serviço de autenticação do EduConecta: contas de utilizador, login,
+    emissão/validação de JWT, e criação de contas pela administração (com
+    envio de credenciais temporárias por email). Não há registo público —
+    `/registo` existe no código mas está sempre bloqueado.
+
+servers:
+  - url: /
+
+tags:
+  - name: monitorização
+    description: Endpoints de health/readiness, sem autenticação.
+  - name: autenticação
+    description: Login, sessão e troca de password.
+  - name: administração
+    description: Criação e consulta de contas, só para administradores.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token devolvido por POST /login, válido por 15 minutos.
+        Enviar em `Authorization: Bearer <token>`.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código de erro curto, estável, para o cliente decidir o que fazer.
+        message:
+          type: string
+          description: Mensagem em português, pronta a mostrar ao utilizador.
+      required: [error, message]
+
+    Utilizador:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "6ae24e41252e5bf6b58984bf"
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        perfil:
+          type: string
+          enum: [admin, encarregado, docente, educadora, auxiliar]
+        estado:
+          type: string
+          example: ativo
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT HS256, válido 15 minutos.
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+        deve_alterar_password:
+          type: boolean
+          description: Se true, o cliente deve chamar /password/alterar antes de mais nada.
+        utilizador:
+          type: object
+          properties:
+            id:
+              type: string
+            nome:
+              type: string
+            email:
+              type: string
+            perfil:
+              type: string
+
+    RegistoRequest:
+      type: object
+      description: >
+        Formato aceite pela função da rota — mas o before_request do serviço
+        bloqueia sempre este endpoint com 403 antes de qualquer validação
+        correr. Documentado por completude, não está acessível neste momento.
+      properties:
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [nome, email, password]
+
+    AlterarPasswordRequest:
+      type: object
+      properties:
+        password_atual:
+          type: string
+        password_nova:
+          type: string
+          description: Entre 15 e 128 caracteres, diferente da atual.
+      required: [password_atual, password_nova]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    CriarUtilizadorRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        perfil:
+          type: string
+          enum: [admin, encarregado, docente, educadora, auxiliar]
+      required: [nome, email, perfil]
+
+    CriarUtilizadorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        email:
+          type: string
+        perfil:
+          type: string
+        estado:
+          type: string
+          example: ativo
+        deve_alterar_password:
+          type: boolean
+          example: true
+        email_credenciais_estado:
+          type: string
+          example: aceite_pelo_smtp
+
+  responses:
+    NaoAutenticado:
+      description: Falta token, token mal formado, expirado ou inválido.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            semToken:
+              value: { error: authentication_required, message: "Envia um token no cabeçalho Authorization: Bearer." }
+            expirado:
+              value: { error: token_expired, message: "A sessão expirou. Inicia sessão novamente." }
+            invalido:
+              value: { error: invalid_token, message: "O token é inválido." }
+    BDIndisponivel:
+      description: Falha a contactar a base de dados.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+paths:
+  /health:
+    get:
+      tags: [monitorização]
+      summary: Liveness check
+      description: Responde sempre 200 se o processo estiver a correr. Sem autenticação.
+      responses:
+        "200":
+          description: Serviço em execução.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: auth }
+                  application: { type: string, example: EduConecta }
+
+  /ready:
+    get:
+      tags: [monitorização]
+      summary: Readiness check
+      description: 200 só se a ligação ao MongoDB Atlas estiver mesmo a funcionar. Sem autenticação.
+      responses:
+        "200":
+          description: Serviço pronto, base de dados ligada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+                  service: { type: string, example: auth }
+                  database: { type: string, example: connected }
+        "503":
+          description: Base de dados indisponível.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: not_ready }
+                  service: { type: string, example: auth }
+                  database: { type: string, example: unavailable }
+
+  /registo:
+    post:
+      tags: [autenticação]
+      summary: Autorregisto (sempre bloqueado)
+      description: >
+        Existe no código mas o `before_request` do serviço devolve sempre 403
+        antes de qualquer validação correr. Documentado por completude.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistoRequest"
+      responses:
+        "403":
+          description: Registo público desativado (resposta real e sempre devolvida).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: registration_disabled
+                message: A criação de contas é feita pela administração.
+
+  /login:
+    post:
+      tags: [autenticação]
+      summary: Autentica por email + password
+      description: >
+        Devolve sempre a mesma mensagem genérica de erro tanto para email
+        inexistente como para password errada — não revela qual dos dois
+        falhou (compara sempre contra um hash, mesmo quando o email não
+        existe, para não dar pistas pelo tempo de resposta).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Corpo do pedido inválido ou com campos errados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Email ou password incorretos, ou formato inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_credentials
+                message: Email ou palavra-passe incorretos.
+        "403":
+          description: Conta existe mas ainda não está ativa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Content-Type não é application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+  /me:
+    get:
+      tags: [autenticação]
+      summary: Dados da conta associada ao token atual
+      description: >
+        Fonte de verdade sobre "quem é este utilizador" — chamada pelos
+        outros 4 serviços para validar sessões e obter o perfil.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Conta válida e ativa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Utilizador"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: Conta inativa, ou precisa de trocar a password primeiro.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+  /password/alterar:
+    post:
+      tags: [autenticação]
+      summary: Troca a password da conta autenticada
+      description: >
+        Confirma a password atual antes de aceitar a nova. É esta rota que
+        desliga `deve_alterar_password`, obrigatória para quem recebeu uma
+        conta criada por um admin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlterarPasswordRequest"
+      responses:
+        "200":
+          description: Password alterada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Campos em falta/errados, ou nova password inválida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token inválido, ou password atual incorreta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Content-Type não é application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+  /admin/utilizadores:
+    post:
+      tags: [administração]
+      summary: Cria uma conta (só admin)
+      description: >
+        Único caminho para criar contas. Gera uma password temporária,
+        envia-a por email, e só marca a conta como 'ativo' depois do email
+        ser aceite pelo SMTP — caso contrário fica em 'provisionamento'
+        bloqueada para revisão manual.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriarUtilizadorRequest"
+      responses:
+        "201":
+          description: Conta criada e email de credenciais aceite pelo SMTP.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CriarUtilizadorResponse"
+        "400":
+          description: Campos em falta/errados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: Quem chama não é um admin ativo e sem troca de password pendente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Já existe uma conta com esse email.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Content-Type não é application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            BD indisponível, SMTP não configurado, envio de email incerto, ou
+            falha a ativar a conta depois do email aceite (nestes últimos
+            casos a resposta inclui sempre o `id` da conta criada, para
+            revisão manual).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/utilizadores/{conta_id}:
+    get:
+      tags: [administração]
+      summary: Consulta uma conta por id (só admin)
+      description: >
+        Usado pelo serviço escolar para confirmar perfil/estado de uma conta
+        sem aceder diretamente à base de dados do auth.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conta_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ObjectId da conta.
+      responses:
+        "200":
+          description: Conta encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Utilizador"
+        "400":
+          description: conta_id não é um ObjectId válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: Quem chama não é um admin ativo e sem troca de password pendente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Não existe conta com este id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"

@@ -1,3 +1,10 @@
+"""Utilitário: respostas de erro padronizadas e chamadas HTTP internas aos
+serviços `auth`/`escolar`, para validar sessão e permissões/relações.
+
+Reencaminha sempre o cabeçalho Authorization recebido do cliente — este
+serviço nunca gera credenciais próprias, só propaga o token da sessão.
+"""
+
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -6,6 +13,11 @@ from flask import jsonify, request
 
 
 def erro(codigo, mensagem, estado):
+    """Constrói a resposta JSON de erro padrão `{error, message}`.
+
+    Acrescenta automaticamente o cabeçalho WWW-Authenticate em erros 401,
+    como exige a especificação HTTP para desafios Bearer.
+    """
     resposta = jsonify({"error": codigo, "message": mensagem})
     if estado == 401:
         resposta.headers["WWW-Authenticate"] = "Bearer"
@@ -13,6 +25,14 @@ def erro(codigo, mensagem, estado):
 
 
 def consultar(url):
+    """Chama um endpoint interno (auth/escolar) com o token do pedido atual.
+
+    Devolve (dados, None) se a resposta for um JSON válido (objeto), ou
+    (None, resposta_de_erro) já formatada para qualquer falha — incluindo
+    traduzir os códigos HTTP do serviço remoto (401/403/404) para erros
+    deste serviço, e qualquer problema de rede/timeout/JSON inválido para
+    503 "dependency_unavailable".
+    """
     pedido = Request(url, headers={
         "Authorization": request.headers.get("Authorization", ""),
         "Accept": "application/json",

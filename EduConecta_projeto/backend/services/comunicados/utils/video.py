@@ -1,9 +1,34 @@
+"""Utilitário: valida um ficheiro MP4 carregado usando o ffprobe (do ffmpeg),
+sem nunca o reencodar — só inspeciona o contentor e recusa o que não bate
+com um MP4 "normal" de telemóvel (H.264 + AAC opcional, uma única pista de
+vídeo). Ao contrário das fotografias, não há conversão aqui: um vídeo que
+passe nesta validação é guardado tal como foi recebido.
+"""
+
 import json
 import math
 import subprocess
 
 
 def analisar_mp4(caminho):
+    """Inspeciona o MP4 em `caminho` e devolve os seus metadados, ou levanta
+    ValueError/subprocess.CalledProcessError/TimeoutExpired se algo não for
+    permitido (apanhado pelo controller, que devolve um 400 genérico sem
+    expor ao cliente qual verificação exata falhou).
+
+    Verificações, por ordem:
+      - o `ffprobe` corre com -protocol_whitelist file (não aceita URLs
+        nem outros protocolos, só o ficheiro local) e timeout de 10s;
+      - o `major_brand` do contentor tem de ser um dos valores MP4/MOV
+        conhecidos — recusa contentores disfarçados de .mp4;
+      - duração finita e positiva;
+      - exatamente uma pista de vídeo, no máximo uma de áudio, e nenhuma
+        pista extra (legendas, metadados, outra pista de vídeo escondida);
+      - vídeo tem de ser H.264 e não pode ser uma "imagem anexada"
+        (capa/thumbnail embutida, sinalizada por `attached_pic`);
+      - áudio, se existir, tem de ser AAC;
+      - largura/altura válidas.
+    """
     resultado = subprocess.run(
         ["ffprobe", "-v", "error", "-protocol_whitelist", "file",
          "-f", "mov", "-show_entries",

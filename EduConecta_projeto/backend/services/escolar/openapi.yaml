@@ -1,0 +1,839 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — escolar
+  version: "1.0.0"
+  description: >
+    API de gestão escolar do EduConecta: alunos, turmas, encarregados de
+    educação, profissionais e as associações entre eles. Todas as rotas,
+    exceto /health e /ready, exigem um token Bearer emitido pelo serviço
+    auth (POST /login) e são filtradas por perfil — ver a descrição de cada
+    rota para saber quem pode chamá-la. A autorização é feita centralmente
+    em controllers/blueprint.py (verificar_acesso_escolar), que valida o
+    token contra o serviço auth antes de qualquer rota correr.
+servers:
+  - url: /
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Erro:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+
+    Aluno:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        numero_processo: { type: string }
+
+    AlunoComTurma:
+      allOf:
+        - $ref: '#/components/schemas/Aluno'
+        - type: object
+          properties:
+            turma_id:
+              type: string
+              nullable: true
+
+    Turma:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        ano_letivo: { type: string, example: "2025/2026" }
+
+    Encarregado:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        telefone: { type: string }
+
+    Profissional:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        perfil: { type: string, enum: [docente, educadora, auxiliar] }
+        utilizador_id: { type: string, nullable: true }
+
+  responses:
+    NaoAutenticado:
+      description: >
+        Sem token, token mal formado, expirado ou inválido (error pode ser
+        authentication_required, invalid_session ou token_expired/invalid_token).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    SemPermissao:
+      description: O perfil autenticado não tem permissão para esta operação (error "forbidden", ou um motivo mais específico descrito na rota).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    ServicoIndisponivel:
+      description: A base de dados Atlas, ou o serviço auth/escolar consultado internamente, não respondeu.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    JsonInvalido:
+      description: Content-Type não é application/json (415), ou o corpo não é um objeto JSON válido (400).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      description: Responde sempre 200 se o processo estiver a correr. Sem autenticação.
+      security: []
+      tags: [monitorização]
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: escolar }
+                  application: { type: string, example: EduConecta }
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: 200 só se a ligação ao MongoDB Atlas estiver mesmo a funcionar. Sem autenticação.
+      security: []
+      tags: [monitorização]
+      responses:
+        "200":
+          description: Base de dados acessível.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+                  service: { type: string }
+                  database: { type: string, example: connected }
+        "503":
+          description: Base de dados inacessível.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: not_ready }
+                  service: { type: string }
+                  database: { type: string, example: unavailable }
+
+  /alunos:
+    get:
+      summary: Listar alunos
+      description: "Lista até 50 alunos. **Perfil: admin apenas.**"
+      tags: [alunos]
+      responses:
+        "200":
+          description: Lista de alunos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alunos: { type: array, items: { $ref: '#/components/schemas/Aluno' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer, example: 50 }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    post:
+      summary: Criar aluno
+      description: "Cria um aluno. **Perfil: admin apenas.** numero_processo é único."
+      tags: [alunos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, numero_processo]
+              properties:
+                nome: { type: string, minLength: 2, maxLength: 150 }
+                numero_processo: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        "201":
+          description: Aluno criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Aluno' }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "409":
+          description: Já existe um aluno com esse número de processo (error duplicate_process_number).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /alunos/{aluno_id}:
+    parameters:
+      - name: aluno_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Consultar aluno
+      description: "Devolve um aluno pelo id. **Perfil: admin apenas.**"
+      tags: [alunos]
+      responses:
+        "200":
+          description: Aluno encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Aluno' }
+        "400":
+          description: aluno_id não é um ObjectId válido (error invalid_student_id).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Aluno não encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    patch:
+      summary: Atualizar aluno
+      description: "Atualização parcial de nome e/ou numero_processo. **Perfil: admin apenas.**"
+      tags: [alunos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                nome: { type: string }
+                numero_processo: { type: string }
+      responses:
+        "200":
+          description: Aluno atualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Aluno' }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Aluno não encontrado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "409":
+          description: numero_processo já usado por outro aluno.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /alunos/{aluno_id}/turma:
+    put:
+      summary: Atribuir turma ao aluno
+      description: "Define (ou substitui) a turma de um aluno. **Perfil: admin apenas.**"
+      tags: [alunos, turmas]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [turma_id]
+              properties:
+                turma_id: { type: string }
+      responses:
+        "200":
+          description: Aluno associado à turma.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Aluno'
+                  - type: object
+                    properties:
+                      turma: { $ref: '#/components/schemas/Turma' }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Turma ou aluno não encontrados (error class_not_found ou student_not_found).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /alunos/{aluno_id}/encarregados/{encarregado_id}:
+    put:
+      summary: Associar encarregado a aluno
+      description: "Liga um encarregado de educação a um aluno (um aluno pode ter vários). **Perfil: admin apenas.**"
+      tags: [alunos, encarregados]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: encarregado_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Associação confirmada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aluno: { $ref: '#/components/schemas/Aluno' }
+                  encarregado: { $ref: '#/components/schemas/Encarregado' }
+                  message: { type: string }
+        "400":
+          description: aluno_id ou encarregado_id inválidos.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Aluno ou encarregado não encontrados.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /alunos/{aluno_id}/encarregados:
+    get:
+      summary: Listar encarregados de um aluno
+      description: "Lista os encarregados de educação associados a um aluno. **Perfil: admin apenas.**"
+      tags: [alunos, encarregados]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de encarregados do aluno.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aluno:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                  encarregados: { type: array, items: { $ref: '#/components/schemas/Encarregado' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "400":
+          description: aluno_id inválido.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Aluno não encontrado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /me/alunos:
+    get:
+      summary: Listar os meus educandos
+      description: >
+        Lista os educandos do encarregado autenticado. **Perfil: encarregado**
+        (rota pessoal — listada em PERMISSOES_PESSOAIS, não precisa de admin).
+        Devolve 403 (school_profile_not_linked) se a conta ainda não tiver um
+        registo de encarregado associado.
+      tags: [alunos]
+      responses:
+        "200":
+          description: Educandos do encarregado autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encarregado:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                  alunos: { type: array, items: { $ref: '#/components/schemas/AlunoComTurma' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /turmas:
+    post:
+      summary: Criar turma
+      description: >
+        Cria uma turma. **Perfil: admin apenas.** ano_letivo tem de ter o
+        formato "AAAA/AAAA" com dois anos consecutivos (ex: "2025/2026").
+      tags: [turmas]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, ano_letivo]
+              properties:
+                nome: { type: string, minLength: 1, maxLength: 100 }
+                ano_letivo: { type: string, example: "2025/2026" }
+      responses:
+        "201":
+          description: Turma criada.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Turma' } }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "409":
+          description: Já existe uma turma com esse nome nesse ano letivo.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    get:
+      summary: Listar turmas
+      description: "Lista até 50 turmas. **Perfil: admin apenas.**"
+      tags: [turmas]
+      responses:
+        "200":
+          description: Lista de turmas.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  turmas: { type: array, items: { $ref: '#/components/schemas/Turma' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /turmas/{turma_id}/alunos:
+    get:
+      summary: Listar alunos de uma turma (admin)
+      description: "Lista os alunos de qualquer turma. **Perfil: admin apenas.**"
+      tags: [turmas, alunos]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Turma + alunos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  turma: { $ref: '#/components/schemas/Turma' }
+                  alunos: { type: array, items: { $ref: '#/components/schemas/Aluno' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "400":
+          description: turma_id inválido.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Turma não encontrada.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /turmas/{turma_id}/profissionais/{profissional_id}:
+    put:
+      summary: Associar profissional a turma
+      description: >
+        Atribui um profissional a uma turma. **Perfil: admin apenas.** Antes
+        de gravar, confirma junto do serviço auth que a conta ligada ao
+        profissional está ativa e que o perfil da conta ainda corresponde ao
+        perfil guardado no registo profissional.
+      tags: [turmas, profissionais]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: profissional_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Profissional associado à turma.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  turma: { $ref: '#/components/schemas/Turma' }
+                  profissional: { $ref: '#/components/schemas/Profissional' }
+        "400":
+          description: turma_id ou profissional_id inválidos.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Turma ou profissional não encontrados.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "409":
+          description: Profissional sem conta válida associada, ou conta inativa/perfil não corresponde.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /me/turmas:
+    get:
+      summary: Listar as minhas turmas
+      description: >
+        Lista as turmas atribuídas ao profissional autenticado. **Perfil:
+        docente, educadora, auxiliar** (rota pessoal). Devolve 403
+        (professional_profile_not_linked ou professional_profile_mismatch) se
+        a conta não tiver um registo profissional correspondente.
+      tags: [turmas]
+      responses:
+        "200":
+          description: Turmas do profissional autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profissional:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                      perfil: { type: string }
+                  turmas: { type: array, items: { $ref: '#/components/schemas/Turma' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /me/turmas/{turma_id}/alunos:
+    get:
+      summary: Listar alunos de uma das minhas turmas
+      description: >
+        Lista os alunos de uma turma do profissional autenticado. **Perfil:
+        docente, educadora, auxiliar.** Devolve 404 (não 403) se a turma
+        existir mas não pertencer ao profissional — de propósito, para não
+        revelar a outros utilizadores quais turmas existem.
+      tags: [turmas, alunos]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Turma + alunos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  turma: { $ref: '#/components/schemas/Turma' }
+                  alunos: { type: array, items: { $ref: '#/components/schemas/AlunoComTurma' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "400":
+          description: turma_id inválido.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Turma inexistente ou não atribuída a este profissional.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /encarregados:
+    post:
+      summary: Criar encarregado de educação
+      description: >
+        Cria um registo de encarregado de educação, ainda sem conta de login
+        associada (ver PUT /encarregados/{id}/utilizador). **Perfil: admin apenas.**
+      tags: [encarregados]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome]
+              properties:
+                nome: { type: string, minLength: 2, maxLength: 150 }
+                telefone: { type: string, maxLength: 30 }
+      responses:
+        "201":
+          description: Encarregado criado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Encarregado' } }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    get:
+      summary: Listar encarregados de educação
+      description: "Lista até 50 encarregados de educação. **Perfil: admin apenas.**"
+      tags: [encarregados]
+      responses:
+        "200":
+          description: Lista de encarregados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encarregados: { type: array, items: { $ref: '#/components/schemas/Encarregado' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /encarregados/{encarregado_id}/alunos:
+    get:
+      summary: Listar educandos de um encarregado (admin)
+      description: "Lista os educandos de um encarregado por id. **Perfil: admin apenas.**"
+      tags: [encarregados, alunos]
+      parameters:
+        - name: encarregado_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Encarregado + educandos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encarregado:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                  alunos: { type: array, items: { $ref: '#/components/schemas/AlunoComTurma' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "400":
+          description: encarregado_id inválido.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Encarregado não encontrado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /encarregados/{encarregado_id}/utilizador:
+    put:
+      summary: Associar conta de utilizador a um encarregado
+      description: >
+        Liga uma conta de utilizador (perfil "encarregado", já criada no
+        auth) a este registo de encarregado. **Perfil: admin apenas** (dupla
+        verificação: pelo before_request do blueprint e, redundantemente,
+        dentro da própria rota — comportamento preservado tal como estava no
+        código original antes do refactor para MVC).
+      tags: [encarregados]
+      parameters:
+        - name: encarregado_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [utilizador_id]
+              properties:
+                utilizador_id: { type: string }
+      responses:
+        "200":
+          description: Conta associada ao encarregado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  encarregado:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                      utilizador_id: { type: string }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Encarregado ou conta de utilizador não encontrados.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "409":
+          description: Perfil da conta não é "encarregado", conta inativa, encarregado já associado a outra conta, ou conta já associada a outro encarregado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /profissionais:
+    post:
+      summary: Criar profissional
+      description: >
+        Cria o registo de profissional ligado a uma conta já existente no
+        auth (confirma que o perfil é docente/educadora/auxiliar e que está
+        ativa). **Perfil: admin apenas.** O registo copia nome e perfil da
+        conta no momento da criação — não fica sincronizado automaticamente
+        depois.
+      tags: [profissionais]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [utilizador_id]
+              properties:
+                utilizador_id: { type: string }
+      responses:
+        "201":
+          description: Profissional criado.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Profissional' } }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Conta de utilizador não existe no auth.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "409":
+          description: Perfil inválido, conta inativa, ou esta conta já tem registo profissional.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    get:
+      summary: Listar profissionais
+      description: "Lista até 50 profissionais. **Perfil: admin apenas.**"
+      tags: [profissionais]
+      responses:
+        "200":
+          description: Lista de profissionais.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profissionais: { type: array, items: { $ref: '#/components/schemas/Profissional' } }
+                  quantidade: { type: integer }
+                  limite: { type: integer }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /me/chat/validar:
+    post:
+      summary: Validar participantes de uma conversa
+      description: >
+        Confirma que a conta autenticada pode participar numa conversa sobre
+        um aluno concreto, validando a cadeia inteira
+        profissional↔turma↔aluno↔encarregado (não só os IDs recebidos). Usado
+        pelo serviço comunicados antes de abrir/usar uma conversa — esta rota
+        não guarda nenhuma conversa, só valida a legitimidade da relação.
+        **Perfil: docente, educadora, encarregado** (rota pessoal — a conta
+        autenticada tem de ser um dos dois participantes indicados no pedido).
+      tags: [chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aluno_id, profissional_utilizador_id, encarregado_utilizador_id]
+              properties:
+                aluno_id: { type: string }
+                profissional_utilizador_id: { type: string }
+                encarregado_utilizador_id: { type: string }
+      responses:
+        "200":
+          description: Conversa legítima.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  autorizado: { type: boolean, example: true }
+                  aluno_id: { type: string }
+                  turma_id: { type: string }
+                  profissional_utilizador_id: { type: string }
+                  encarregado_utilizador_id: { type: string }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403":
+          description: Conta não é participante válido da conversa indicada, ou o perfil não corresponde ao registo profissional (error forbidden).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "404":
+          description: A cadeia de relações não fecha (aluno não é educando deste encarregado, ou turma não é lecionada por este profissional).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }

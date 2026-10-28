@@ -10,11 +10,16 @@ from utils.acesso import verificar_acesso
 from utils.imagem import preparar_fotografia
 from utils.service_client import erro
 
+"""Controller: publicar e listar comunicados de uma turma, e anexar
+fotografias a um comunicado (vídeo fica em anexo_controller.py, que também
+trata de listar/descarregar os dois tipos de anexo)."""
+
 bp = Blueprint("comunicados", __name__)
 
 
 @bp.post("/turmas/<turma_id>/comunicados")
 def publicar_comunicado(turma_id):
+    """Cria um comunicado na turma — só docente/educadora atribuídos a ela."""
     falha = verificar_acesso(turma_id, publicar=True)
 
     if falha is not None:
@@ -76,6 +81,7 @@ def publicar_comunicado(turma_id):
 
 @bp.get("/turmas/<turma_id>/comunicados")
 def listar_comunicados(turma_id):
+    """Lista comunicados de uma turma, paginados — qualquer perfil com acesso à turma."""
     falha = verificar_acesso(turma_id)
 
     if falha is not None:
@@ -144,6 +150,9 @@ def listar_comunicados(turma_id):
     "<comunicado_id>/fotografias"
 )
 def anexar_fotografia(turma_id, comunicado_id):
+    """Processa e anexa uma fotografia a um comunicado já existente, criado por
+    esta própria conta (ver models.comunicado.obter_editavel). A conversão da
+    imagem (formato, tamanho, EXIF) está em utils/imagem.py."""
     falha = verificar_acesso(turma_id, publicar=True)
 
     if falha is not None:

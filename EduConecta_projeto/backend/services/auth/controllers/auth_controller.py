@@ -1,3 +1,9 @@
+"""Controller: rotas de autenticação e gestão de contas.
+
+Valida o input de cada pedido, chama models/utilizador.py para aceder aos
+dados e devolve a resposta JSON. Não há acesso direto à base de dados aqui.
+"""
+
 import secrets
 
 import aiosmtplib
@@ -13,6 +19,10 @@ from utils.tokens import descodificar_token, gerar_token
 
 bp = Blueprint("auth", __name__)
 
+# Hash fixo gerado uma vez no arranque, usado no /login quando o email não
+# existe: faz o check_password_hash correr na mesma (tempo semelhante a um
+# login real), para não dar a quem ataca uma forma de descobrir, pelo tempo
+# de resposta, se um email está ou não registado.
 dummy_password_hash = generate_password_hash(
     secrets.token_urlsafe(32),
     method="scrypt",
@@ -23,6 +33,9 @@ PERFIS_PERMITIDOS = {"admin", "encarregado", "docente", "educadora", "auxiliar"}
 
 @bp.before_request
 async def bloquear_registo_publico():
+    """Desativa o /registo público — só uma conta admin pode criar utilizadores
+    (via /admin/utilizadores). A rota continua a existir por compatibilidade,
+    mas está sempre bloqueada."""
     if request.endpoint == "auth.registar_utilizador":
         return jsonify({
             "error": "registration_disabled",
@@ -32,12 +45,16 @@ async def bloquear_registo_publico():
 
 @bp.after_request
 async def impedir_cache_autenticacao(resposta):
+    """Evita que respostas com dados de sessão fiquem guardadas em cache/proxy."""
     resposta.headers["Cache-Control"] = "no-store"
     return resposta
 
 
 @bp.post("/registo")
 async def registar_utilizador():
+    """Rota de autorregisto (perfil 'encarregado'). Sempre bloqueada pelo
+    before_request acima — mantida para o caso de o registo público voltar
+    a ser ativado no futuro."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -117,6 +134,12 @@ async def registar_utilizador():
 
 @bp.post("/login")
 async def login():
+    """Autentica por email/password e devolve um JWT de 15 minutos.
+
+    Responde sempre com a mesma mensagem genérica de erro ("Email ou
+    palavra-passe incorretos") tanto para email inexistente como para
+    password errada — não revela qual dos dois falhou.
+    """
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -207,6 +230,12 @@ async def login():
 
 @bp.get("/me")
 async def consultar_conta():
+    """Devolve os dados da conta associada ao token atual.
+
+    Chamado por todos os outros serviços para validar sessões e obter o
+    perfil de quem fez o pedido — é a única fonte de verdade sobre "quem é
+    este utilizador" para o resto do sistema.
+    """
     utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
 
     if erro is not None:
@@ -253,6 +282,12 @@ async def consultar_conta():
 
 @bp.post("/password/alterar")
 async def alterar_password():
+    """Troca a password da conta autenticada, confirmando primeiro a password atual.
+
+    É este endpoint que desliga `deve_alterar_password`, por isso é
+    obrigatório para quem recebeu uma conta criada por um admin (password
+    temporária por email).
+    """
     utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
 
     if erro is not None:
@@ -322,6 +357,13 @@ async def alterar_password():
 
 @bp.post("/admin/utilizadores")
 async def criar_utilizador_com_email():
+    """Único caminho para criar contas: exige admin autenticado, cria o
+    utilizador com password temporária e envia-a por email.
+
+    Se o email falhar a enviar, a conta fica em 'provisionamento' (não
+    'ativo') para revisão manual — nunca se ativa uma conta sem confirmação
+    de que a pessoa recebeu as credenciais.
+    """
     utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
 
     if erro is not None:
@@ -475,6 +517,12 @@ async def criar_utilizador_com_email():
 
 @bp.get("/admin/utilizadores/<conta_id>")
 async def consultar_utilizador_administracao(conta_id):
+    """Consulta de conta por id, só para administradores.
+
+    Usado pelo serviço escolar (ex: ao associar uma conta a um encarregado
+    ou profissional) para confirmar perfil/estado de uma conta sem precisar
+    de acesso direto à base de dados do auth.
+    """
     administrador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
 
     if erro is not None:

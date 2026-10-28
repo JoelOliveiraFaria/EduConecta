@@ -1,3 +1,10 @@
+"""Utilitário: chamadas HTTP ao serviço auth (fora do processo, via rede Docker).
+
+Isto não é um model — não acede à base de dados deste serviço, só fala com
+outro serviço. Fica em utils/ porque é uma dependência externa partilhada
+por vários controllers, não lógica de negócio do escolar.
+"""
+
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -7,6 +14,8 @@ from flask import jsonify
 
 
 def obter_utilizador_da_sessao(token):
+    """Valida um token junto do auth (GET /me); usado pelo before_request do
+    blueprint para autenticar TODOS os pedidos a este serviço."""
     pedido = Request(
         "http://auth:8000/me",
         headers={"Authorization": f"Bearer {token}"},
@@ -76,7 +85,18 @@ def obter_utilizador_da_sessao(token):
 
 
 def obter_conta_para_associacao(conta_id, autorizacao_header):
-    """Usado por associar_conta_encarregado: distingue 401 de 403 explicitamente."""
+    """Consulta uma conta no auth (GET /admin/utilizadores/<id>) para a rota
+    de associar conta a encarregado. Devolve 401 ("invalid_session") e 403
+    ("forbidden") com mensagens DIFERENTES uma da outra.
+
+    ATENÇÃO: esta função parece quase idêntica a
+    `consultar_conta_profissional_auth` logo abaixo, mas NÃO são
+    intercambiáveis — têm formas de erro diferentes porque servem chamadores
+    diferentes que já esperavam essas formas antes do refactor para MVC.
+    Isto foi uma decisão deliberada para preservar o comportamento exato do
+    código original, não um esquecimento de duplicação a limpar. Se
+    precisares de juntar as duas, confirma primeiro com quem chama cada uma
+    que o novo formato de erro não vai partir nada."""
     pedido = Request(
         f"http://auth:8000/admin/utilizadores/{conta_id}",
         headers={"Authorization": autorizacao_header},
@@ -149,7 +169,11 @@ def obter_conta_para_associacao(conta_id, autorizacao_header):
 
 
 def consultar_conta_profissional_auth(conta_id, autorizacao_header):
-    """Usado por criar_profissional/associar_profissional_turma: agrupa 401 e 403."""
+    """Consulta uma conta no auth (GET /admin/utilizadores/<id>) para as rotas
+    de profissionais (criar_profissional, associar_profissional_turma).
+    Agrupa 401 e 403 num único erro ("authorization_failed") — ver o aviso
+    em `obter_conta_para_associacao` acima sobre porque esta função não foi
+    fundida com essa."""
     pedido = Request(
         f"http://auth:8000/admin/utilizadores/{conta_id}",
         headers={"Authorization": autorizacao_header},

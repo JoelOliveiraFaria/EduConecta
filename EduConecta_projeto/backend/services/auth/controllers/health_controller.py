@@ -1,3 +1,5 @@
+"""Controller: endpoints de monitorização (/health, /ready) — sem autenticação."""
+
 from quart import Blueprint, jsonify
 from pymongo.errors import PyMongoError
 
@@ -8,6 +10,7 @@ bp = Blueprint("health", __name__)
 
 @bp.get("/health")
 async def health():
+    """Liveness check — responde sempre 200 se o processo estiver a correr."""
     return jsonify({
         "status": "ok",
         "service": "auth",
@@ -17,6 +20,7 @@ async def health():
 
 @bp.get("/ready")
 async def ready():
+    """Readiness check — 200 só se a ligação à Atlas estiver mesmo a funcionar."""
     try:
         await modelo_utilizador.contar_colecoes()
 
