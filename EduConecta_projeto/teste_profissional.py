@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 warnings.simplefilter("error", GetPassWarning)
 
 AUTH = "http://auth:8000"
-SCHOOL = "http://school:8000"
+SCHOOL = "http://escolar:8000"
 
 EMAIL_DOCENTE = "emmadeoliveira260105+docente@gmail.com"
 TURMA_ID = "6ae0caf50852a73f69bac39e"

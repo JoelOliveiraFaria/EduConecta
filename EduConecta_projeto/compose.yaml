@@ -1,15 +1,15 @@
 name: educonecta
 
 services:
-  school:
+  escolar:
     build:
-      context: ./backend/services/school
+      context: ./backend/services/escolar
     environment:
       MONGO_HOST: mongo-school
       MONGO_PORT: "27017"
-      MONGO_SCHOOL_USERNAME: ${MONGO_SCHOOL_USERNAME:?Falta MONGO_SCHOOL_USERNAME no .env}
-      MONGO_SCHOOL_PASSWORD: ${MONGO_SCHOOL_PASSWORD:?Falta MONGO_SCHOOL_PASSWORD no .env}
-      MONGO_SCHOOL_DATABASE: ${MONGO_SCHOOL_DATABASE:?Falta MONGO_SCHOOL_DATABASE no .env}
+      MONGO_ESCOLAR_USERNAME: ${MONGO_ESCOLAR_USERNAME:?Falta MONGO_ESCOLAR_USERNAME no .env}
+      MONGO_ESCOLAR_PASSWORD: ${MONGO_ESCOLAR_PASSWORD:?Falta MONGO_ESCOLAR_PASSWORD no .env}
+      MONGO_ESCOLAR_DATABASE: ${MONGO_ESCOLAR_DATABASE:?Falta MONGO_ESCOLAR_DATABASE no .env}
     ports:
       - "127.0.0.1:5001:8000"
     healthcheck:
@@ -37,6 +37,31 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY no .env}
     ports:
       - "127.0.0.1:5002:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  diario:
+    build:
+      context: ./backend/services/diario
+    environment:
+      MONGO_HOST: mongo-school
+      MONGO_PORT: "27017"
+      MONGO_DIARIO_USERNAME: ${MONGO_DIARIO_USERNAME:?Falta MONGO_DIARIO_USERNAME no .env}
+      MONGO_DIARIO_PASSWORD: ${MONGO_DIARIO_PASSWORD:?Falta MONGO_DIARIO_PASSWORD no .env}
+      MONGO_DIARIO_DATABASE: ${MONGO_DIARIO_DATABASE:?Falta MONGO_DIARIO_DATABASE no .env}
+    ports:
+      - "127.0.0.1:5003:8000"
+    depends_on:
+      mongo-school:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD

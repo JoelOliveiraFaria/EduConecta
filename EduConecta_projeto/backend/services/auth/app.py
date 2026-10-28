@@ -357,6 +357,9 @@ def login():
         "access_token": token,
         "token_type": "Bearer",
         "expires_in": 900,
+        "deve_alterar_password": bool(
+            utilizador.get("deve_alterar_password", False)
+        ),
         "utilizador": {
             "id": str(utilizador["_id"]),
             "nome": utilizador["nome"],
@@ -616,13 +619,14 @@ def criar_utilizador_com_email():
             email.strip(),
             check_deliverability=False,
         ).normalized.lower()
+
     except EmailNotValidError:
         return jsonify({
             "error": "invalid_email",
             "message": "Indica um email válido.",
         }), 400
 
-        perfis_permitidos = {
+    perfis_permitidos = {
         "admin",
         "encarregado",
         "docente",
@@ -630,13 +634,7 @@ def criar_utilizador_com_email():
         "auxiliar",
     }
 
-    if not isinstance(perfil, str) or perfil not in {
-        "admin",
-        "encarregado",
-        "docente",
-        "educadora",
-        "auxiliar",
-    }:
+    if not isinstance(perfil, str) or perfil not in perfis_permitidos:
         return jsonify({
             "error": "invalid_profile",
             "message": (
@@ -644,6 +642,7 @@ def criar_utilizador_com_email():
                 "docente, educadora e auxiliar."
             ),
         }), 400
+
     
     remetente = os.environ.get("SMTP_USERNAME")
     password_smtp = os.environ.get("SMTP_PASSWORD")

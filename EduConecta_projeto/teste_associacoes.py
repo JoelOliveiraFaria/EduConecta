@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 warnings.simplefilter("error", GetPassWarning)
 
 AUTH = "http://auth:8000"
-SCHOOL = "http://school:8000"
+SCHOOL = "http://escolar:8000"
 
 
 def pedido(base, caminho, metodo="GET", dados=None, token=None):

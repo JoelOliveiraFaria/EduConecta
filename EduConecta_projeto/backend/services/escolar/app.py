@@ -13,13 +13,13 @@ from urllib.request import Request, urlopen
 app = Flask(__name__)
 app.json.ensure_ascii = False
 
-database_name = os.environ["MONGO_SCHOOL_DATABASE"]
+database_name = os.environ["MONGO_ESCOLAR_DATABASE"]
 
 client = MongoClient(
     host=os.environ["MONGO_HOST"],
     port=int(os.environ.get("MONGO_PORT", "27017")),
-    username=os.environ["MONGO_SCHOOL_USERNAME"],
-    password=os.environ["MONGO_SCHOOL_PASSWORD"],
+    username=os.environ["MONGO_ESCOLAR_USERNAME"],
+    password=os.environ["MONGO_ESCOLAR_PASSWORD"],
     authSource=database_name,
     serverSelectionTimeoutMS=3000,
     connectTimeoutMS=3000,
@@ -33,7 +33,7 @@ database = client[database_name]
 def health():
     return jsonify({
         "status": "ok",
-        "service": "school",
+        "service": "escolar",
         "application": "EduConecta",
     }), 200
 
@@ -45,13 +45,13 @@ def ready():
     except PyMongoError:
         return jsonify({
             "status": "not_ready",
-            "service": "school",
+            "service": "escolar",
             "database": "unavailable",
         }), 503
 
     return jsonify({
         "status": "ready",
-        "service": "school",
+        "service": "escolar",
         "database": "connected",
     }), 200
 
