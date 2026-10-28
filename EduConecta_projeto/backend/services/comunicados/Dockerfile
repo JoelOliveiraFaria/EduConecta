@@ -15,7 +15,7 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 
 RUN useradd --create-home appuser
 
-COPY --chown=appuser:appuser app.py anexos.py ./
+COPY --chown=appuser:appuser . .
 
 USER appuser
 

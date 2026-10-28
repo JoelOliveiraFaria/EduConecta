@@ -10,10 +10,10 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 
 RUN useradd --create-home appuser
 
-COPY --chown=appuser:appuser app.py .
+COPY --chown=appuser:appuser . .
 
 USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+CMD ["hypercorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

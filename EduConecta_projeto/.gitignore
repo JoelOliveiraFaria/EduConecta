@@ -8,6 +8,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+atlas-credentials.env
+*credentials*.env
 
 # macOS
 .DS_Store

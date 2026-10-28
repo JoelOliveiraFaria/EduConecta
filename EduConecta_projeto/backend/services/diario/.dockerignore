@@ -6,3 +6,6 @@ __pycache__/
 .git/
 *.bak
 .DS_Store
+tests/
+requirements-dev.txt
+pytest.ini

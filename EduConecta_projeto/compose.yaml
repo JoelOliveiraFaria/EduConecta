@@ -5,10 +5,7 @@ services:
     build:
       context: ./backend/services/escolar
     environment:
-      MONGO_HOST: mongo-school
-      MONGO_PORT: "27017"
-      MONGO_ESCOLAR_USERNAME: ${MONGO_ESCOLAR_USERNAME:?Falta MONGO_ESCOLAR_USERNAME no .env}
-      MONGO_ESCOLAR_PASSWORD: ${MONGO_ESCOLAR_PASSWORD:?Falta MONGO_ESCOLAR_PASSWORD no .env}
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_ESCOLAR_DATABASE: ${MONGO_ESCOLAR_DATABASE:?Falta MONGO_ESCOLAR_DATABASE no .env}
     ports:
       - "127.0.0.1:5001:8000"
@@ -29,10 +26,7 @@ services:
     build:
       context: ./backend/services/auth
     environment:
-      MONGO_HOST: mongo-school
-      MONGO_PORT: "27017"
-      MONGO_AUTH_USERNAME: ${MONGO_AUTH_USERNAME:?Falta MONGO_AUTH_USERNAME no .env}
-      MONGO_AUTH_PASSWORD: ${MONGO_AUTH_PASSWORD:?Falta MONGO_AUTH_PASSWORD no .env}
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_AUTH_DATABASE: ${MONGO_AUTH_DATABASE:?Falta MONGO_AUTH_DATABASE no .env}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY no .env}
     ports:
@@ -52,15 +46,14 @@ services:
     build:
       context: ./backend/services/diario
     environment:
-      MONGO_HOST: mongo-school
-      MONGO_PORT: "27017"
-      MONGO_DIARIO_USERNAME: ${MONGO_DIARIO_USERNAME:?Falta MONGO_DIARIO_USERNAME no .env}
-      MONGO_DIARIO_PASSWORD: ${MONGO_DIARIO_PASSWORD:?Falta MONGO_DIARIO_PASSWORD no .env}
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_DIARIO_DATABASE: ${MONGO_DIARIO_DATABASE:?Falta MONGO_DIARIO_DATABASE no .env}
     ports:
       - "127.0.0.1:5003:8000"
     depends_on:
-      mongo-school:
+      auth:
+        condition: service_healthy
+      escolar:
         condition: service_healthy
     healthcheck:
       test:
@@ -78,16 +71,11 @@ services:
     build:
       context: ./backend/services/comunicados
     environment:
-      MONGO_HOST: mongo-school
-      MONGO_PORT: "27017"
-      MONGO_COMUNICADOS_USERNAME: ${MONGO_COMUNICADOS_USERNAME:?Falta MONGO_COMUNICADOS_USERNAME no .env}
-      MONGO_COMUNICADOS_PASSWORD: ${MONGO_COMUNICADOS_PASSWORD:?Falta MONGO_COMUNICADOS_PASSWORD no .env}
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_COMUNICADOS_DATABASE: ${MONGO_COMUNICADOS_DATABASE:?Falta MONGO_COMUNICADOS_DATABASE no .env}
     ports:
       - "127.0.0.1:5004:8000"
     depends_on:
-      mongo-school:
-        condition: service_healthy
       auth:
         condition: service_healthy
       escolar:
@@ -103,42 +91,15 @@ services:
       retries: 3
       start_period: 10s
 
-      
-  mongo-school:
-    image: mongo:8.0
-    ports:
-      - "127.0.0.1:27018:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Falta MONGO_ROOT_USERNAME no .env}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Falta MONGO_ROOT_PASSWORD no .env}
-    volumes:
-      - school_mongo_data:/data/db
-    healthcheck:
-      test:
-        - CMD
-        - mongosh
-        - --quiet
-        - --eval
-        - "quit(db.adminCommand({ping: 1}).ok ? 0 : 1)"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   assiduidade:
     build:
       context: ./backend/services/assiduidade
     environment:
-      MONGO_HOST: mongo-school
-      MONGO_PORT: "27017"
-      MONGO_ASSIDUIDADE_USERNAME: ${MONGO_ASSIDUIDADE_USERNAME:?Falta MONGO_ASSIDUIDADE_USERNAME no .env}
-      MONGO_ASSIDUIDADE_PASSWORD: ${MONGO_ASSIDUIDADE_PASSWORD:?Falta MONGO_ASSIDUIDADE_PASSWORD no .env}
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_ASSIDUIDADE_DATABASE: ${MONGO_ASSIDUIDADE_DATABASE:?Falta MONGO_ASSIDUIDADE_DATABASE no .env}
     ports:
       - "127.0.0.1:5005:8000"
     depends_on:
-      mongo-school:
-        condition: service_healthy
       auth:
         condition: service_healthy
       escolar:
@@ -153,6 +114,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
-volumes:
-  school_mongo_data:
