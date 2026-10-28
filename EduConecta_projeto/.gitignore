@@ -13,3 +13,5 @@ __pycache__/
 .DS_Store
 
 /.env.smtp
+.env.assiduidade
+compose.yaml.before-assiduidade

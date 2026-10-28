@@ -878,6 +878,11 @@ def verificar_acesso_escolar():
         "listar_meus_alunos": {"encarregado"},
         "listar_minhas_turmas": {"docente", "educadora", "auxiliar"},
         "listar_alunos_minha_turma": {"docente", "educadora", "auxiliar"},
+        "validar_participantes_chat": {
+            "docente",
+            "educadora",
+            "encarregado",
+        },
     }
 
     if request.endpoint in permissoes_pessoais:
@@ -1545,4 +1550,145 @@ def listar_alunos_minha_turma(turma_id):
         "alunos": alunos,
         "quantidade": len(alunos),
         "limite": 50,
+    }), 200
+
+@app.post("/me/chat/validar")
+def validar_participantes_chat():
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia Content-Type: application/json.",
+        }), 415
+
+    dados = request.get_json(silent=True)
+
+    campos = {
+        "aluno_id",
+        "profissional_utilizador_id",
+        "encarregado_utilizador_id",
+    }
+
+    if (
+        not isinstance(dados, dict)
+        or set(dados) != campos
+        or any(
+            not isinstance(dados[campo], str)
+            or not ObjectId.is_valid(dados[campo])
+            for campo in campos
+        )
+    ):
+        return jsonify({
+            "error": "invalid_fields",
+            "message": (
+                "Envia aluno_id, profissional_utilizador_id e "
+                "encarregado_utilizador_id com identificadores válidos."
+            ),
+        }), 400
+
+    aluno_oid = ObjectId(dados["aluno_id"])
+    profissional_conta_oid = ObjectId(
+        dados["profissional_utilizador_id"]
+    )
+    encarregado_conta_oid = ObjectId(
+        dados["encarregado_utilizador_id"]
+    )
+    conta_atual_oid = ObjectId(g.utilizador["id"])
+
+    perfil_atual = g.utilizador["perfil"]
+
+    if perfil_atual in {"docente", "educadora"}:
+        participante_valido = (
+            conta_atual_oid == profissional_conta_oid
+        )
+    elif perfil_atual == "encarregado":
+        participante_valido = (
+            conta_atual_oid == encarregado_conta_oid
+        )
+    else:
+        participante_valido = False
+
+    if (
+        not participante_valido
+        or profissional_conta_oid == encarregado_conta_oid
+    ):
+        return jsonify({
+            "error": "forbidden",
+            "message": "Só podes validar conversas em que participas.",
+        }), 403
+
+    try:
+        profissional = database["profissionais"].find_one(
+            {
+                "utilizador_id": profissional_conta_oid,
+                "perfil": {"$in": ["docente", "educadora"]},
+            },
+            {"perfil": 1},
+        )
+
+        encarregado = database["encarregados_educacao"].find_one(
+            {"utilizador_id": encarregado_conta_oid},
+            {"_id": 1},
+        )
+
+        aluno = None
+        turma = None
+
+        if profissional is not None and encarregado is not None:
+            aluno = database["alunos"].find_one(
+                {
+                    "_id": aluno_oid,
+                    "encarregados_ids": encarregado["_id"],
+                },
+                {"turma_id": 1},
+            )
+
+            if aluno is not None and isinstance(
+                aluno.get("turma_id"), ObjectId
+            ):
+                turma = database["turmas"].find_one(
+                    {
+                        "_id": aluno["turma_id"],
+                        "profissionais_ids": profissional["_id"],
+                    },
+                    {"_id": 1},
+                )
+
+        if (
+            profissional is None
+            or encarregado is None
+            or aluno is None
+            or turma is None
+        ):
+            return jsonify({
+                "error": "chat_not_accessible",
+                "message": (
+                    "A relação escolar não existe ou não permite "
+                    "esta conversa."
+                ),
+            }), 404
+
+        if (
+            perfil_atual in {"docente", "educadora"}
+            and profissional.get("perfil") != perfil_atual
+        ):
+            return jsonify({
+                "error": "forbidden",
+                "message": (
+                    "O perfil da conta não corresponde ao "
+                    "registo profissional."
+                ),
+            }), 403
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível validar os participantes.",
+        }), 503
+
+    return jsonify({
+        "autorizado": True,
+        "aluno_id": str(aluno_oid),
+        "turma_id": str(turma["_id"]),
+        "profissional_utilizador_id": str(profissional_conta_oid),
+        "encarregado_utilizador_id": str(encarregado_conta_oid),
     }), 200

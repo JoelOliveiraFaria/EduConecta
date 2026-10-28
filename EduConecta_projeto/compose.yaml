@@ -73,6 +73,37 @@ services:
       retries: 3
       start_period: 10s
 
+
+  comunicados:
+    build:
+      context: ./backend/services/comunicados
+    environment:
+      MONGO_HOST: mongo-school
+      MONGO_PORT: "27017"
+      MONGO_COMUNICADOS_USERNAME: ${MONGO_COMUNICADOS_USERNAME:?Falta MONGO_COMUNICADOS_USERNAME no .env}
+      MONGO_COMUNICADOS_PASSWORD: ${MONGO_COMUNICADOS_PASSWORD:?Falta MONGO_COMUNICADOS_PASSWORD no .env}
+      MONGO_COMUNICADOS_DATABASE: ${MONGO_COMUNICADOS_DATABASE:?Falta MONGO_COMUNICADOS_DATABASE no .env}
+    ports:
+      - "127.0.0.1:5004:8000"
+    depends_on:
+      mongo-school:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      escolar:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+      
   mongo-school:
     image: mongo:8.0
     ports:
@@ -93,6 +124,30 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  assiduidade:
+    build:
+      context: ./backend/services/assiduidade
+    ports:
+      - "127.0.0.1:5005:8000"
+    env_file:
+      - .env.assiduidade
+    environment:
+      MONGO_HOST: mongo-school
+      MONGO_PORT: "27017"
+    depends_on:
+      mongo-school:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      escolar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/ready', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   school_mongo_data:
