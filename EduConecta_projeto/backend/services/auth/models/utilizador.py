@@ -8,6 +8,7 @@ responsabilidade dos controllers que chamam estas funções.
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from pymongo import ReturnDocument
 from werkzeug.security import generate_password_hash
 
 from db import utilizadores
@@ -29,9 +30,16 @@ async def obter_por_id(utilizador_id, projecao=None):
     return await utilizadores.find_one({"_id": ObjectId(utilizador_id)}, projecao)
 
 
-async def existe_email(email):
-    """Verifica rapidamente se já existe uma conta com este email (só projeta o _id)."""
-    return await utilizadores.find_one({"email": email}, {"_id": 1})
+async def existe_email(email, excluir_id=None):
+    """Verifica rapidamente se já existe uma conta com este email (só projeta o _id).
+
+    Com `excluir_id`, ignora essa própria conta na comparação — usado ao
+    editar o email de um utilizador, para não rejeitar o próprio email dele.
+    """
+    filtro = {"email": email}
+    if excluir_id is not None:
+        filtro["_id"] = {"$ne": ObjectId(excluir_id)}
+    return await utilizadores.find_one(filtro, {"_id": 1})
 
 
 async def criar_encarregado(nome, email, password):
@@ -97,4 +105,50 @@ async def atualizar_password(utilizador_id, password_nova):
             },
             "$unset": {"password_temporaria_expira_em": ""},
         },
+    )
+
+
+async def atualizar_dados(utilizador_id, alteracoes):
+    """Aplica um $set parcial (nome/email/perfil) e devolve a conta já atualizada (RF04)."""
+    return await utilizadores.find_one_and_update(
+        {"_id": ObjectId(utilizador_id)},
+        {"$set": alteracoes},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+async def desativar(utilizador_id):
+    """Define estado 'inativo' (RF05). Devolve a conta já atualizada."""
+    return await utilizadores.find_one_and_update(
+        {"_id": ObjectId(utilizador_id)},
+        {"$set": {"estado": "inativo", "desativado_em": datetime.now(timezone.utc)}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+async def reativar(utilizador_id):
+    """Reverte uma desativação, define estado 'ativo'. Devolve a conta já atualizada."""
+    return await utilizadores.find_one_and_update(
+        {"_id": ObjectId(utilizador_id)},
+        {"$set": {"estado": "ativo"}, "$unset": {"desativado_em": ""}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+async def eliminar(utilizador_id, eliminado_por_id):
+    """Soft delete (RF06): define estado 'eliminado' e guarda quem/quando.
+
+    O documento nunca é removido da base de dados — só fica bloqueado em
+    todo o resto do sistema, porque login/`/me`/tudo exige `estado == "ativo"`.
+    """
+    return await utilizadores.find_one_and_update(
+        {"_id": ObjectId(utilizador_id)},
+        {
+            "$set": {
+                "estado": "eliminado",
+                "eliminado_em": datetime.now(timezone.utc),
+                "eliminado_por": ObjectId(eliminado_por_id),
+            },
+        },
+        return_document=ReturnDocument.AFTER,
     )

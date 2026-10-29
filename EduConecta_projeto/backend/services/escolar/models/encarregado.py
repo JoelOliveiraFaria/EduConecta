@@ -8,9 +8,15 @@ from db import database
 colecao = database["encarregados_educacao"]
 
 
-def criar(nome, telefone):
-    """Insere um encarregado de educação novo; devolve (id gerado, documento inserido)."""
-    encarregado = {"nome": nome, "telefone": telefone}
+def criar(nome, cc, telemovel, utilizador_id):
+    """Insere um encarregado de educação já ligado à conta de utilizador
+    (criada no auth por criar_conta_utilizador); devolve (id gerado, documento inserido)."""
+    encarregado = {
+        "nome": nome,
+        "cc": cc,
+        "telemovel": telemovel,
+        "utilizador_id": utilizador_id,
+    }
     resultado = colecao.insert_one(encarregado)
     return resultado.inserted_id, encarregado
 
@@ -19,7 +25,7 @@ def listar():
     """Até 50 encarregados de educação, por nome."""
     return (
         colecao
-        .find({}, {"nome": 1, "telefone": 1})
+        .find({}, {"nome": 1, "cc": 1, "telemovel": 1})
         .sort([("nome", 1), ("_id", 1)])
         .limit(50)
     )
@@ -82,7 +88,7 @@ def listar_por_ids(ids):
     encarregados_ids guardados num aluno."""
     return (
         colecao
-        .find({"_id": {"$in": ids}}, {"nome": 1, "telefone": 1})
+        .find({"_id": {"$in": ids}}, {"nome": 1, "cc": 1, "telemovel": 1, "utilizador_id": 1})
         .sort([("nome", 1), ("_id", 1)])
         .limit(50)
     )

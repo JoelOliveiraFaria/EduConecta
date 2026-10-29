@@ -31,11 +31,30 @@ def serializar_conversa(documento):
 
 
 def serializar_mensagem(documento, conta_id):
-    """Converte uma mensagem em JSON, marcando `enviada_por_mim` relativo a conta_id."""
+    """Converte uma mensagem em JSON, marcando `enviada_por_mim` relativo a conta_id.
+
+    `tipo` é "texto", "fotografia" ou "video". Para "texto", `texto` vem
+    preenchido e `anexo` é None; para os outros dois é o inverso — `texto`
+    é None e `anexo` traz o id do ficheiro no GridFS e o URL para o
+    descarregar (ver chat_controller.obter_anexo_mensagem)."""
+    tipo = documento.get("tipo", "texto")
+    conversa_id = documento["conversa_id"]
+    mensagem_id = str(documento["_id"])
+
+    anexo = None
+    if tipo != "texto" and documento.get("anexo_id") is not None:
+        anexo = {
+            "id": str(documento["anexo_id"]),
+            "tipo": "image/jpeg" if tipo == "fotografia" else "video/mp4",
+            "url": f"/conversas/{conversa_id}/mensagens/{mensagem_id}/anexo",
+        }
+
     return {
-        "id": str(documento["_id"]),
-        "conversa_id": documento["conversa_id"],
-        "texto": documento["texto"],
+        "id": mensagem_id,
+        "conversa_id": conversa_id,
+        "tipo": tipo,
+        "texto": documento.get("texto"),
+        "anexo": anexo,
         "enviada_por_mim": documento["enviado_por"] == conta_id,
         "criado_em": documento["criado_em"].isoformat(
             timespec="milliseconds"
@@ -80,12 +99,18 @@ def listar_conversas_participante(filtro, limite):
     )
 
 
-def criar_mensagem(conversa_id, texto, enviado_por):
-    """Regista uma mensagem numa conversa já validada pelo controller."""
+def criar_mensagem(conversa_id, enviado_por, tipo="texto", texto=None, anexo_id=None):
+    """Regista uma mensagem numa conversa já validada pelo controller.
+
+    `tipo` decide qual dos dois campos (`texto` ou `anexo_id`) é relevante —
+    o outro fica a None no documento, nunca os dois preenchidos ao mesmo tempo.
+    """
     documento = {
         "_id": ObjectId(),
         "conversa_id": conversa_id,
+        "tipo": tipo,
         "texto": texto,
+        "anexo_id": anexo_id,
         "enviado_por": enviado_por,
         "criado_em": datetime.now(timezone.utc),
     }
@@ -101,3 +126,13 @@ def listar_mensagens(filtro, limite):
         .sort("_id", -1)
         .limit(limite + 1)
     )
+
+
+def obter_mensagem(conversa_id, mensagem_id):
+    """Devolve uma mensagem pelo id, confirmando que pertence a esta conversa."""
+    if not ObjectId.is_valid(mensagem_id):
+        return None
+    return database["mensagens"].find_one({
+        "_id": ObjectId(mensagem_id),
+        "conversa_id": conversa_id,
+    })

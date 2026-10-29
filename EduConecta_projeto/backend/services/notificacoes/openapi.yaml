@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: EduConecta — notificacoes
+  version: "1.0.0"
+  description: >-
+    Notificações in-app (Fase 2). Este serviço não expõe nenhuma rota para
+    criar notificações — elas são geradas automaticamente por um consumidor
+    RabbitMQ que escuta eventos publicados pelos outros serviços
+    (comunicado.criado, falta.justificacao.submetida,
+    falta.justificacao.decidida, aluno.eliminado). As únicas rotas públicas
+    são para o próprio utilizador consultar e marcar como lidas as suas
+    próprias notificações.
+servers:
+  - url: /
+
+tags:
+  - name: Monitorização
+    description: Endpoints sem autenticação, usados pelo healthcheck do Docker.
+  - name: Notificações
+    description: Consulta das notificações do próprio utilizador autenticado.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token emitido por `POST /login` no serviço `auth`. É reencaminhado
+        tal e qual para o `auth` para validar a sessão.
+
+  schemas:
+    ErroPadrao:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+    Notificacao:
+      type: object
+      properties:
+        id: { type: string }
+        tipo:
+          type: string
+          enum: [comunicado, justificacao_pendente, justificacao_decidida]
+        titulo: { type: string }
+        mensagem: { type: string }
+        referencia:
+          type: object
+          description: Campos variam conforme o tipo (turma_id, aluno_id, comunicado_id, data, estado...).
+        lida: { type: boolean }
+        criada_em: { type: string, format: date-time }
+
+  responses:
+    NaoAutenticado:
+      description: Sessão inválida, expirada, ou cabeçalho Authorization em falta/malformado.
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+    DependenciaIndisponivel:
+      description: Base de dados ou serviço auth indisponível.
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+
+paths:
+  /health:
+    get:
+      tags: [Monitorização]
+      summary: Liveness check
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema: { type: object }
+              example: { status: ok, service: notificacoes }
+
+  /ready:
+    get:
+      tags: [Monitorização]
+      summary: Readiness check (confirma ligação à Atlas)
+      responses:
+        "200":
+          description: Serviço pronto.
+          content:
+            application/json:
+              schema: { type: object }
+              example: { status: ready, service: notificacoes, database: connected }
+        "503": { $ref: "#/components/responses/DependenciaIndisponivel" }
+
+  /me/notificacoes:
+    get:
+      tags: [Notificações]
+      summary: Listar as minhas notificações
+      description: >-
+        Lista as notificações do utilizador autenticado, mais recentes
+        primeiro, paginadas (20 por página). **Qualquer perfil autenticado.**
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+      responses:
+        "200":
+          description: Lista de notificações.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notificacoes:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notificacao" }
+                  quantidade: { type: integer }
+                  pagina: { type: integer }
+                  limite: { type: integer, example: 20 }
+                  tem_mais: { type: boolean }
+        "400":
+          description: Parâmetro pagina inválido, ou outro parâmetro não suportado.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "503": { $ref: "#/components/responses/DependenciaIndisponivel" }
+
+  /me/notificacoes/{notificacao_id}/lida:
+    patch:
+      tags: [Notificações]
+      summary: Marcar uma notificação como lida
+      description: Só o destinatário da notificação a pode marcar como lida.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: notificacao_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Notificação marcada como lida.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Notificacao" }
+        "400":
+          description: Identificador de notificação inválido.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404":
+          description: Notificação não encontrada (ou não pertence a este utilizador).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503": { $ref: "#/components/responses/DependenciaIndisponivel" }

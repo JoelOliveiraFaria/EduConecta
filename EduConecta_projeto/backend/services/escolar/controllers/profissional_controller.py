@@ -6,16 +6,19 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import models.profissional as modelo_profissional
 from controllers.blueprint import bp
-from utils.auth_client import consultar_conta_profissional_auth
+from utils.auth_client import criar_conta_utilizador
+from utils.validacao import validar_cc, validar_email_superficial, validar_telemovel
+
+PERFIS_PROFISSIONAL = {"docente", "educadora", "auxiliar"}
 
 
 @bp.post("/profissionais")
 def criar_profissional():
-    """Cria o registo de profissional ligado a uma conta já existente no auth.
-
-    Confirma junto do auth que a conta tem perfil docente/educadora/auxiliar
-    e está ativa antes de gravar — o registo copia nome e perfil da conta
-    no momento da criação (não fica sincronizado automaticamente depois)."""
+    """Cria o registo de profissional E a sua conta de login, num único
+    pedido: o auth cria a conta (perfil docente/educadora/auxiliar, conforme
+    indicado) e envia uma password temporária para o email indicado — mesmo
+    fluxo já usado em POST /encarregados. Não é preciso nenhuma conta
+    criada à parte."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -24,46 +27,72 @@ def criar_profissional():
 
     dados = request.get_json(silent=True)
 
+    campos_permitidos = {"nome", "email", "cc", "telemovel", "perfil"}
+    obrigatorios = {"nome", "email", "cc", "perfil"}
+
     if (
         not isinstance(dados, dict)
-        or set(dados) != {"utilizador_id"}
-        or not isinstance(dados["utilizador_id"], str)
-        or not ObjectId.is_valid(dados["utilizador_id"])
+        or set(dados) - campos_permitidos
+        or obrigatorios - set(dados)
     ):
         return jsonify({
             "error": "invalid_fields",
-            "message": "Envia apenas utilizador_id com um identificador válido.",
+            "message": (
+                "Os campos nome, email, cc e perfil são obrigatórios; "
+                "telemovel é opcional. Não são permitidos outros campos."
+            ),
         }), 400
 
-    conta_id = str(ObjectId(dados["utilizador_id"]))
-    conta, erro = consultar_conta_profissional_auth(
-        conta_id, request.headers.get("Authorization", "")
+    nome = dados.get("nome")
+    email = dados.get("email")
+    cc = dados.get("cc")
+    telemovel = dados.get("telemovel", "")
+    perfil = dados.get("perfil")
+
+    if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+        return jsonify({
+            "error": "invalid_name",
+            "message": "O nome deve ser texto com 2 a 150 caracteres.",
+        }), 400
+
+    if not validar_cc(cc):
+        return jsonify({
+            "error": "invalid_cc",
+            "message": "O número de cartão de cidadão deve ser texto com 5 a 30 caracteres.",
+        }), 400
+
+    if not validar_telemovel(telemovel):
+        return jsonify({
+            "error": "invalid_phone",
+            "message": "O telemóvel deve ser texto com até 30 caracteres.",
+        }), 400
+
+    if not validar_email_superficial(email):
+        return jsonify({
+            "error": "invalid_email",
+            "message": "Indica um email válido.",
+        }), 400
+
+    if not isinstance(perfil, str) or perfil not in PERFIS_PROFISSIONAL:
+        return jsonify({
+            "error": "invalid_profile",
+            "message": "O perfil deve ser docente, educadora ou auxiliar.",
+        }), 400
+
+    conta, erro = criar_conta_utilizador(
+        nome.strip(), email.strip(), perfil, request.headers.get("Authorization", "")
     )
 
     if erro is not None:
         return erro
 
-    if conta.get("perfil") not in {"docente", "educadora", "auxiliar"}:
-        return jsonify({
-            "error": "invalid_user_profile",
-            "message": "A conta deve ter perfil docente, educadora ou auxiliar.",
-        }), 409
-
-    if conta.get("estado") != "ativo":
-        return jsonify({
-            "error": "account_inactive",
-            "message": "A conta de utilizador não está ativa.",
-        }), 409
-
     try:
-        if modelo_profissional.existe_por_utilizador(ObjectId(conta_id)) is not None:
-            return jsonify({
-                "error": "professional_already_registered",
-                "message": "Esta conta já tem um registo profissional.",
-            }), 409
-
         inserted_id, profissional = modelo_profissional.criar(
-            ObjectId(conta_id), conta.get("nome"), conta["perfil"]
+            ObjectId(conta["id"]),
+            nome.strip(),
+            perfil,
+            cc.strip(),
+            telemovel.strip(),
         )
 
     except DuplicateKeyError:
@@ -75,14 +104,24 @@ def criar_profissional():
     except PyMongoError:
         return jsonify({
             "error": "database_unavailable",
-            "message": "Não foi possível criar o profissional.",
+            "message": (
+                "A conta de login foi criada e o email foi enviado, mas não foi "
+                "possível guardar o registo profissional. Contacta a "
+                "administração — a conta já existe, não a voltes a criar."
+            ),
+            "utilizador_id": conta["id"],
         }), 503
 
     return jsonify({
         "id": str(inserted_id),
-        "utilizador_id": conta_id,
+        "utilizador_id": str(profissional["utilizador_id"]),
         "nome": profissional["nome"],
         "perfil": profissional["perfil"],
+        "cc": profissional["cc"],
+        "telemovel": profissional["telemovel"],
+        "email": conta.get("email"),
+        "estado": conta.get("estado"),
+        "deve_alterar_password": conta.get("deve_alterar_password"),
     }), 201
 
 
@@ -97,6 +136,8 @@ def listar_profissionais():
                 "id": str(documento["_id"]),
                 "nome": documento.get("nome"),
                 "perfil": documento.get("perfil"),
+                "cc": documento.get("cc", ""),
+                "telemovel": documento.get("telemovel", ""),
                 "utilizador_id": (
                     str(documento["utilizador_id"])
                     if documento.get("utilizador_id") is not None

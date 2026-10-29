@@ -1,12 +1,21 @@
 import hashlib
+import subprocess
+import tempfile
+from io import BytesIO
 
 from bson import ObjectId
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
+from gridfs.errors import CorruptGridFile, NoFile
+from PIL import Image, UnidentifiedImageError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+import models.anexo as modelo_anexo
 import models.conversa as modelo_conversa
+from db import MAX_FOTOGRAFIA_BYTES, MAX_VIDEO_BYTES
 from utils.acesso import obter_conta_chat, validar_relacao_chat
+from utils.imagem import preparar_fotografia
 from utils.service_client import erro
+from utils.video import analisar_mp4
 
 """Controller: conversas e mensagens entre um profissional (docente/educadora)
 e um encarregado de educação, sobre um aluno em concreto.
@@ -16,6 +25,12 @@ A autorização nunca confia só no `conversa_id` — toda vez que uma conversa
 serviço escolar (ver utils/acesso.validar_relacao_chat), para a conversa
 deixar de ser acessível automaticamente se essa relação deixar de existir
 (ex: aluno mudou de turma, profissional deixou de estar atribuído a ela).
+
+Uma mensagem pode ser texto, fotografia ou vídeo (`tipo`) — fotografia e
+vídeo reutilizam exatamente a mesma validação/conversão que os comunicados
+já usavam para fotografias (Pillow) e vídeos (ffprobe), só que gravadas com
+`metadata.conversa_id` em vez de `metadata.comunicado_id` nos buckets GridFS
+partilhados (ver models/anexo.py).
 """
 
 bp = Blueprint("chat", __name__)
@@ -259,7 +274,7 @@ def enviar_mensagem(conversa_id):
 
     try:
         documento = modelo_conversa.criar_mensagem(
-            conversa["_id"], texto.strip(), conta_id
+            conversa["_id"], conta_id, tipo="texto", texto=texto.strip()
         )
 
     except PyMongoError:
@@ -273,6 +288,235 @@ def enviar_mensagem(conversa_id):
     return jsonify(
         modelo_conversa.serializar_mensagem(documento, conta_id)
     ), 201
+
+
+@bp.post("/conversas/<conversa_id>/mensagens/fotografia")
+def enviar_fotografia(conversa_id):
+    """Envia uma mensagem de fotografia — mesma validação/conversão que
+    comunicado_controller.anexar_fotografia (Pillow: reencode JPEG, remove
+    EXIF, limite de píxeis e tamanho)."""
+    conversa, conta, falha = obter_conversa_autorizada(conversa_id)
+
+    if falha is not None:
+        return falha
+
+    if request.mimetype != "multipart/form-data":
+        return erro(
+            "unsupported_media_type",
+            "Envia a fotografia como multipart/form-data.",
+            415,
+        )
+
+    if (
+        request.form
+        or set(request.files) != {"fotografia"}
+        or len(request.files.getlist("fotografia")) != 1
+    ):
+        return erro(
+            "invalid_fields",
+            "Envia apenas um ficheiro no campo fotografia.",
+            400,
+        )
+
+    ficheiro = request.files["fotografia"]
+    conteudo = ficheiro.stream.read(MAX_FOTOGRAFIA_BYTES + 1)
+
+    if not conteudo:
+        return erro("empty_file", "A fotografia está vazia.", 400)
+
+    if len(conteudo) > MAX_FOTOGRAFIA_BYTES:
+        return erro("file_too_large", "A fotografia deve ter até 5 MB.", 413)
+
+    try:
+        imagem_jpeg, largura, altura = preparar_fotografia(conteudo)
+
+    except (
+        UnidentifiedImageError,
+        Image.DecompressionBombError,
+        OSError,
+        ValueError,
+        SyntaxError,
+    ):
+        return erro(
+            "invalid_image",
+            "Envia uma imagem JPEG, PNG ou WebP válida, "
+            "não animada e com até 20 milhões de píxeis. "
+            "A imagem convertida também deve caber em 5 MB.",
+            400,
+        )
+
+    conta_id = str(ObjectId(conta["id"]))
+    fotografia_id = ObjectId()
+
+    try:
+        modelo_anexo.guardar_fotografia_mensagem(
+            fotografia_id,
+            imagem_jpeg,
+            f"educonecta-{fotografia_id}.jpg",
+            {
+                "conversa_id": conversa["_id"],
+                "criado_por": conta_id,
+                "tipo": "image/jpeg",
+                "largura": largura,
+                "altura": altura,
+            },
+        )
+        documento = modelo_conversa.criar_mensagem(
+            conversa["_id"], conta_id, tipo="fotografia", anexo_id=fotografia_id
+        )
+
+    except PyMongoError:
+        return erro(
+            "database_unavailable",
+            "Não foi possível confirmar o envio da fotografia. "
+            "Não repitas automaticamente o pedido.",
+            503,
+        )
+
+    return jsonify(modelo_conversa.serializar_mensagem(documento, conta_id)), 201
+
+
+@bp.post("/conversas/<conversa_id>/mensagens/video")
+def enviar_video(conversa_id):
+    """Envia uma mensagem de vídeo — mesma validação (ffprobe) e streaming
+    para ficheiro temporário que o comunicado_controller usava antes de o
+    vídeo deixar de ser anexo de comunicado."""
+    conversa, conta, falha = obter_conversa_autorizada(conversa_id)
+
+    if falha is not None:
+        return falha
+
+    if request.mimetype != "multipart/form-data":
+        return erro("unsupported_media_type", "Envia multipart/form-data.", 415)
+
+    if (
+        request.form
+        or set(request.files) != {"video"}
+        or len(request.files.getlist("video")) != 1
+    ):
+        return erro("invalid_fields", "Envia apenas um ficheiro no campo video.", 400)
+
+    conta_id = str(ObjectId(conta["id"]))
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", mode="w+b") as tmp:
+            tamanho = 0
+
+            while True:
+                bloco = request.files["video"].stream.read(64 * 1024)
+
+                if not bloco:
+                    break
+
+                tamanho += len(bloco)
+
+                if tamanho > MAX_VIDEO_BYTES:
+                    return erro("file_too_large", "O vídeo deve ter até 25 MB.", 413)
+
+                tmp.write(bloco)
+
+            if tamanho == 0:
+                return erro("empty_file", "O vídeo está vazio.", 400)
+
+            tmp.flush()
+
+            try:
+                info = analisar_mp4(tmp.name)
+            except subprocess.TimeoutExpired:
+                return erro("video_analysis_timeout", "Análise excedeu dez segundos.", 400)
+            except (subprocess.CalledProcessError, ValueError, TypeError,
+                    KeyError, AttributeError, OverflowError):
+                return erro(
+                    "invalid_video",
+                    "Envia MP4 H.264, com áudio AAC opcional, sem pistas adicionais.",
+                    400,
+                )
+
+            tmp.seek(0)
+            video_id = ObjectId()
+
+            try:
+                modelo_anexo.guardar_video_mensagem(
+                    tmp,
+                    video_id,
+                    f"educonecta-{video_id}.mp4",
+                    {
+                        "conversa_id": conversa["_id"],
+                        "criado_por": conta_id,
+                        "tipo": "video/mp4",
+                        **info,
+                    },
+                )
+                documento = modelo_conversa.criar_mensagem(
+                    conversa["_id"], conta_id, tipo="video", anexo_id=video_id
+                )
+            except PyMongoError:
+                return erro(
+                    "database_unavailable",
+                    "Carregamento não confirmado. Não repitas automaticamente.",
+                    503,
+                )
+
+    except OSError:
+        return erro(
+            "video_processing_unavailable",
+            "Ferramenta ou armazenamento temporário indisponível.",
+            503,
+        )
+
+    return jsonify(modelo_conversa.serializar_mensagem(documento, conta_id)), 201
+
+
+@bp.get("/conversas/<conversa_id>/mensagens/<mensagem_id>/anexo")
+def obter_anexo_mensagem(conversa_id, mensagem_id):
+    """Descarrega o anexo (fotografia ou vídeo) de uma mensagem."""
+    conversa, conta, falha = obter_conversa_autorizada(conversa_id)
+
+    if falha is not None:
+        return falha
+
+    try:
+        mensagem = modelo_conversa.obter_mensagem(conversa["_id"], mensagem_id)
+    except PyMongoError:
+        return erro("database_unavailable", "Não foi possível consultar a mensagem.", 503)
+
+    if mensagem is None or mensagem.get("tipo") not in {"fotografia", "video"}:
+        return erro("attachment_not_accessible", "Esta mensagem não tem anexo.", 404)
+
+    tipo_bucket = "fotografias" if mensagem["tipo"] == "fotografia" else "videos"
+    limite = MAX_FOTOGRAFIA_BYTES if tipo_bucket == "fotografias" else MAX_VIDEO_BYTES
+
+    try:
+        ficheiro = modelo_anexo.obter_anexo_mensagem(
+            tipo_bucket, mensagem["anexo_id"], conversa["_id"]
+        )
+
+        if ficheiro is None:
+            return erro("attachment_not_accessible", "Anexo não acessível.", 404)
+
+        with ficheiro:
+            if not 0 < ficheiro.length <= limite:
+                return erro("attachment_unavailable", "Tamanho inesperado.", 503)
+
+            dados = ficheiro.read(limite + 1)
+
+            if len(dados) != ficheiro.length:
+                return erro("attachment_unavailable", "Anexo incompleto.", 503)
+
+    except (NoFile, CorruptGridFile, PyMongoError):
+        return erro("attachment_unavailable", "Não foi possível ler o anexo.", 503)
+
+    extensao = "jpg" if tipo_bucket == "fotografias" else "mp4"
+    resposta = send_file(
+        BytesIO(dados),
+        mimetype="image/jpeg" if tipo_bucket == "fotografias" else "video/mp4",
+        download_name=f"educonecta-{mensagem['anexo_id']}.{extensao}",
+        as_attachment=request.args.get("download") == "1",
+        conditional=True, etag=False, max_age=0,
+    )
+    resposta.headers["Cache-Control"] = "no-store"
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    return resposta
 
 
 @bp.get("/conversas/<conversa_id>/mensagens")

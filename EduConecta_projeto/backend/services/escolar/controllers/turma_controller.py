@@ -31,16 +31,23 @@ def criar_turma():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
-    campos_permitidos = {"nome", "ano_letivo"}
+    campos_permitidos = {"nome", "ano_letivo", "tipo"}
 
-    if set(dados) - campos_permitidos:
+    if set(dados) - campos_permitidos or "tipo" not in dados:
         return jsonify({
             "error": "unknown_fields",
-            "message": "Os campos permitidos são nome e ano_letivo.",
+            "message": "Os campos permitidos são nome, ano_letivo e tipo (obrigatório).",
         }), 400
 
     nome = dados.get("nome")
     ano_letivo = dados.get("ano_letivo")
+    tipo = dados.get("tipo")
+
+    if not isinstance(tipo, str) or tipo not in modelo_turma.TIPOS:
+        return jsonify({
+            "error": "invalid_class_type",
+            "message": "O tipo deve ser creche ou basico.",
+        }), 400
 
     if not isinstance(nome, str) or not 1 <= len(nome.strip()) <= 100:
         return jsonify({
@@ -78,7 +85,7 @@ def criar_turma():
         }), 400
 
     try:
-        inserted_id, turma = modelo_turma.criar(nome.strip(), ano_letivo)
+        inserted_id, turma = modelo_turma.criar(nome.strip(), ano_letivo, tipo)
 
     except DuplicateKeyError:
         return jsonify({
@@ -96,6 +103,7 @@ def criar_turma():
         "id": str(inserted_id),
         "nome": turma["nome"],
         "ano_letivo": turma["ano_letivo"],
+        "tipo": turma["tipo"],
     }), 201
 
 
@@ -110,6 +118,7 @@ def listar_turmas():
                 "id": str(documento["_id"]),
                 "nome": documento.get("nome"),
                 "ano_letivo": documento.get("ano_letivo"),
+                "tipo": documento.get("tipo"),
             }
             for documento in documentos
         ]
@@ -124,6 +133,70 @@ def listar_turmas():
         "turmas": turmas,
         "quantidade": len(turmas),
         "limite": 50,
+    }), 200
+
+
+@bp.get("/turmas/<turma_id>")
+def obter_turma(turma_id):
+    """Detalhe de uma turma: profissionais atribuídos.
+
+    Admin pode consultar qualquer turma; um profissional só consegue ver
+    turmas onde está atribuído (RNF01) — para as restantes, devolve 404,
+    não 403, para não revelar que a turma existe a quem não tem acesso.
+    Não há distinção entre os profissionais atribuídos (ex: "diretor de
+    turma") — qualquer um pode fazer tudo o que a turma permite a um
+    profissional, incluindo decidir justificações de faltas no assiduidade.
+    """
+    if not ObjectId.is_valid(turma_id):
+        return jsonify({
+            "error": "invalid_class_id",
+            "message": "O identificador da turma é inválido.",
+        }), 400
+
+    try:
+        turma = modelo_turma.obter_detalhe(turma_id)
+
+        if turma is None:
+            return jsonify({
+                "error": "class_not_found",
+                "message": "Turma não encontrada.",
+            }), 404
+
+        profissionais_ids = turma.get("profissionais_ids", [])
+
+        if g.utilizador["perfil"] != "admin":
+            profissional, erro = obter_profissional_da_sessao()
+
+            if erro is not None:
+                return erro
+
+            if profissional["_id"] not in profissionais_ids:
+                return jsonify({
+                    "error": "class_not_found",
+                    "message": "Turma não encontrada.",
+                }), 404
+
+        profissionais_docs = modelo_profissional.listar_por_ids(profissionais_ids)
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível consultar a turma.",
+        }), 503
+
+    return jsonify({
+        "id": str(turma["_id"]),
+        "nome": turma.get("nome"),
+        "ano_letivo": turma.get("ano_letivo"),
+        "tipo": turma.get("tipo"),
+        "profissionais": [
+            {
+                "id": str(documento["_id"]),
+                "nome": documento.get("nome"),
+                "perfil": documento.get("perfil"),
+            }
+            for documento in profissionais_docs
+        ],
     }), 200
 
 
@@ -169,6 +242,7 @@ def listar_alunos_turma(turma_id):
             "id": str(turma["_id"]),
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
+            "tipo": turma.get("tipo"),
         },
         "alunos": alunos,
         "quantidade": len(alunos),
@@ -183,7 +257,10 @@ def associar_profissional_turma(turma_id, profissional_id):
     Antes de gravar, confirma junto do auth que a conta ligada ao
     profissional está ativa e que o perfil da conta ainda bate certo com o
     perfil guardado no registo profissional (a conta pode ter mudado de
-    perfil no auth depois do registo ter sido criado aqui)."""
+    perfil no auth depois do registo ter sido criado aqui). Uma turma só
+    pode ter um docente (o "professor" é sempre o responsável principal da
+    turma) — educadoras e auxiliares não têm esse limite.
+    """
     if not ObjectId.is_valid(turma_id):
         return jsonify({
             "error": "invalid_class_id",
@@ -230,6 +307,26 @@ def associar_profissional_turma(turma_id, profissional_id):
                 "message": "A conta não está ativa ou o perfil não corresponde.",
             }), 409
 
+        if profissional.get("perfil") == "docente":
+            ids_atuais = modelo_turma.profissionais_atribuidos(turma_id)
+
+            if ids_atuais is None:
+                return jsonify({
+                    "error": "class_not_found",
+                    "message": "Turma não encontrada.",
+                }), 404
+
+            colegas = modelo_profissional.listar_por_ids(ids_atuais)
+
+            if any(
+                colega["perfil"] == "docente" and colega["_id"] != profissional["_id"]
+                for colega in colegas
+            ):
+                return jsonify({
+                    "error": "class_already_has_teacher",
+                    "message": "Esta turma já tem um docente atribuído — só pode ter um.",
+                }), 409
+
         turma = modelo_turma.adicionar_profissional(turma_id, profissional["_id"])
 
     except PyMongoError:
@@ -250,6 +347,7 @@ def associar_profissional_turma(turma_id, profissional_id):
             "id": str(turma["_id"]),
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
+            "tipo": turma.get("tipo"),
         },
         "profissional": {
             "id": str(profissional["_id"]),
@@ -275,6 +373,7 @@ def listar_minhas_turmas():
                 "id": str(documento["_id"]),
                 "nome": documento.get("nome"),
                 "ano_letivo": documento.get("ano_letivo"),
+                "tipo": documento.get("tipo"),
             }
             for documento in documentos
         ]
@@ -347,6 +446,7 @@ def listar_alunos_minha_turma(turma_id):
             "id": str(turma["_id"]),
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
+            "tipo": turma.get("tipo"),
         },
         "alunos": alunos,
         "quantidade": len(alunos),

@@ -162,6 +162,29 @@ components:
           type: string
           example: aceite_pelo_smtp
 
+    EditarUtilizadorRequest:
+      type: object
+      description: Pelo menos um dos três campos tem de ser enviado.
+      properties:
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        perfil:
+          type: string
+          enum: [admin, encarregado, docente, educadora, auxiliar]
+      minProperties: 1
+
+    EstadoUtilizadorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        estado:
+          type: string
+          example: inativo
+
   responses:
     NaoAutenticado:
       description: Falta token, token mal formado, expirado ou inválido.
@@ -479,6 +502,230 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Não existe conta com este id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+    patch:
+      tags: [administração]
+      summary: Edita nome, email e/ou perfil de uma conta (RF04, só admin)
+      description: >
+        Pelo menos um campo tem de ser enviado. Se o email mudar, não pode
+        colidir com o de outra conta. Uma conta com estado 'eliminado'
+        responde 404 (trata-se como inexistente, não se revela que existiu).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conta_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ObjectId da conta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditarUtilizadorRequest"
+      responses:
+        "200":
+          description: Conta atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Utilizador"
+        "400":
+          description: Nenhum campo válido enviado, ou campo com formato inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: Quem chama não é um admin ativo e sem troca de password pendente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Não existe conta com este id, ou já está eliminada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Já existe outra conta com o email indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Content-Type não é application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+    delete:
+      tags: [administração]
+      summary: Elimina uma conta (RF06, só admin — soft delete)
+      description: >
+        O documento NUNCA é removido da base de dados — só o `estado` muda
+        para 'eliminado', bloqueando a conta em todo o sistema (login, /me
+        e tudo o resto exigem estado "ativo"). Guarda `eliminado_em` e
+        `eliminado_por` para auditoria. Um admin não pode eliminar a sua
+        própria conta. Uma conta já eliminada responde 404, tal como uma
+        que nunca existiu.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conta_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ObjectId da conta.
+      responses:
+        "200":
+          description: Conta eliminada (soft delete).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoUtilizadorResponse"
+        "400":
+          description: conta_id não é um ObjectId válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: >
+            Quem chama não é um admin ativo e sem troca de password
+            pendente, ou está a tentar eliminar a própria conta
+            (`cannot_act_on_self`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Não existe conta com este id, ou já está eliminada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+  /admin/utilizadores/{conta_id}/desativar:
+    post:
+      tags: [administração]
+      summary: Desativa temporariamente uma conta (RF05, só admin)
+      description: >
+        Define estado 'inativo' — reversível via /reativar. Só é possível
+        a partir de estado 'ativo'. Um admin não pode desativar a sua
+        própria conta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conta_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ObjectId da conta.
+      responses:
+        "200":
+          description: Conta desativada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoUtilizadorResponse"
+        "400":
+          description: conta_id não é um ObjectId válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: >
+            Quem chama não é um admin ativo e sem troca de password
+            pendente, ou está a tentar desativar a própria conta
+            (`cannot_act_on_self`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Não existe conta com este id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A conta não está em estado 'ativo' — não pode ser desativada a partir do estado atual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/BDIndisponivel"
+
+  /admin/utilizadores/{conta_id}/reativar:
+    post:
+      tags: [administração]
+      summary: Reverte uma desativação (RF05, só admin)
+      description: >
+        Define estado 'ativo'. Só é possível a partir de 'inativo' — uma
+        conta 'eliminada' (soft delete) não pode ser reativada por aqui.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conta_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ObjectId da conta.
+      responses:
+        "200":
+          description: Conta reativada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoUtilizadorResponse"
+        "400":
+          description: conta_id não é um ObjectId válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          description: Quem chama não é um admin ativo e sem troca de password pendente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Não existe conta com este id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A conta não está em estado 'inativo' — não pode ser reativada a partir do estado atual.
           content:
             application/json:
               schema:

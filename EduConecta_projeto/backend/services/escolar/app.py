@@ -8,6 +8,7 @@ from flask import Flask
 
 from controllers.health_controller import bp as health_bp
 from controllers.docs_controller import bp as docs_bp
+from controllers.interno_controller import bp as interno_bp
 from controllers.blueprint import bp as escolar_bp
 
 import controllers.aluno_controller  # noqa: F401  (regista rotas no escolar_bp)
@@ -21,4 +22,5 @@ app.json.ensure_ascii = False
 
 app.register_blueprint(health_bp)
 app.register_blueprint(docs_bp)
+app.register_blueprint(interno_bp)
 app.register_blueprint(escolar_bp)

@@ -168,6 +168,98 @@ def obter_conta_para_associacao(conta_id, autorizacao_header):
     return conta, None
 
 
+def criar_conta_utilizador(nome, email, perfil, autorizacao_header):
+    """Pede ao auth para criar a conta de login de uma pessoa nova (perfil
+    "encarregado", "docente", "educadora" ou "auxiliar") — o auth gera a
+    password temporária e envia-a por email, via POST /admin/utilizadores.
+    Usado por criar_encarregado e criar_profissional para que o registo
+    escolar e a conta nasçam juntos, num único pedido, em vez de precisar
+    de dois passos (criar a conta à parte + ligar pelo id).
+    """
+    corpo = json.dumps({"nome": nome, "email": email, "perfil": perfil}).encode("utf-8")
+    pedido = Request(
+        "http://auth:8000/admin/utilizadores",
+        data=corpo,
+        headers={
+            "Authorization": autorizacao_header,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(pedido, timeout=15) as resposta:
+            conta = json.loads(resposta.read().decode("utf-8"))
+
+    except HTTPError as erro:
+        codigo = erro.code
+
+        try:
+            corpo_erro = json.loads(erro.read().decode("utf-8"))
+        except (ValueError, UnicodeError):
+            corpo_erro = {}
+
+        erro.close()
+
+        mensagem = corpo_erro.get("message") if isinstance(corpo_erro, dict) else None
+        codigo_erro = corpo_erro.get("error") if isinstance(corpo_erro, dict) else None
+
+        if codigo == 409:
+            return None, (
+                jsonify({
+                    "error": codigo_erro or "email_already_registered",
+                    "message": mensagem or "Já existe uma conta com esse email.",
+                }),
+                409,
+            )
+
+        if codigo == 400:
+            return None, (
+                jsonify({
+                    "error": codigo_erro or "invalid_fields",
+                    "message": mensagem or "Dados inválidos para criar a conta.",
+                }),
+                400,
+            )
+
+        if codigo in {401, 403}:
+            return None, (
+                jsonify({
+                    "error": "authorization_failed",
+                    "message": "Não foi possível autorizar a criação da conta.",
+                }),
+                codigo,
+            )
+
+        return None, (
+            jsonify({
+                "error": codigo_erro or "account_creation_failed",
+                "message": mensagem or "Não foi possível criar a conta de utilizador.",
+            }),
+            503,
+        )
+
+    except (URLError, OSError, ValueError, UnicodeError):
+        return None, (
+            jsonify({
+                "error": "authentication_unavailable",
+                "message": "O serviço de autenticação não está disponível.",
+            }),
+            503,
+        )
+
+    if not isinstance(conta, dict) or not isinstance(conta.get("id"), str):
+        return None, (
+            jsonify({
+                "error": "authentication_unavailable",
+                "message": "A resposta da autenticação é inválida.",
+            }),
+            503,
+        )
+
+    return conta, None
+
+
 def consultar_conta_profissional_auth(conta_id, autorizacao_header):
     """Consulta uma conta no auth (GET /admin/utilizadores/<id>) para as rotas
     de profissionais (criar_profissional, associar_profissional_turma).

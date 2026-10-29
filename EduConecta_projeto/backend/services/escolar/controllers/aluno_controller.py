@@ -1,7 +1,9 @@
 """Controller: rotas de gestão de alunos (CRUD, associação a turma/encarregados).
 
 Todas as rotas daqui passam primeiro por `verificar_acesso_escolar`
-(controllers/blueprint.py) — só exigem admin, exceto /me/alunos.
+(controllers/blueprint.py). A maioria exige admin; exceções: /me/alunos
+(encarregado) e, desde a Fase 1, PATCH /alunos/<id> (também aberto a um
+profissional, limitado à sua própria turma).
 """
 
 from bson import ObjectId
@@ -11,7 +13,8 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 import models.aluno as modelo_aluno
 import models.encarregado as modelo_encarregado
 import models.turma as modelo_turma
-from controllers.blueprint import bp
+from controllers.blueprint import bp, obter_profissional_da_sessao
+from utils.eventos import publicar
 
 
 @bp.get("/alunos")
@@ -137,12 +140,39 @@ def obter_aluno(aluno_id):
 
 @bp.patch("/alunos/<aluno_id>")
 def atualizar_aluno(aluno_id):
-    """Atualiza parcialmente nome e/ou numero_processo de um aluno."""
+    """Atualiza parcialmente nome e/ou numero_processo de um aluno.
+
+    RF09: além do admin, um profissional (docente/educadora/auxiliar) pode
+    editar um aluno, mas só se o aluno estiver numa turma onde esse
+    profissional está atribuído (RNF01 — acesso limitado à própria turma).
+    """
     if not ObjectId.is_valid(aluno_id):
         return jsonify({
             "error": "invalid_student_id",
             "message": "O identificador do aluno é inválido.",
         }), 400
+
+    if g.utilizador["perfil"] != "admin":
+        aluno_atual = modelo_aluno.obter(aluno_id)
+
+        if aluno_atual is None:
+            return jsonify({
+                "error": "student_not_found",
+                "message": "Aluno não encontrado.",
+            }), 404
+
+        turma_id = aluno_atual.get("turma_id")
+
+        profissional, erro = obter_profissional_da_sessao()
+
+        if erro is not None:
+            return erro
+
+        if turma_id is None or not modelo_turma.esta_atribuido(turma_id, profissional["_id"]):
+            return jsonify({
+                "error": "forbidden",
+                "message": "Só podes editar alunos da tua própria turma.",
+            }), 403
 
     if not request.is_json:
         return jsonify({
@@ -221,6 +251,44 @@ def atualizar_aluno(aluno_id):
         "id": str(aluno["_id"]),
         "nome": aluno.get("nome"),
         "numero_processo": aluno.get("numero_processo"),
+    }), 200
+
+
+@bp.delete("/alunos/<aluno_id>")
+def eliminar_aluno(aluno_id):
+    """Elimina um aluno (RF10) — soft delete, admin apenas.
+
+    O documento não é removido da base de dados, só marcado como eliminado;
+    deixa de aparecer em qualquer listagem/consulta normal a partir daqui.
+    Os registos históricos noutros serviços (diario, assiduidade) que
+    referenciam este aluno_id não são tocados — ficam como estavam.
+    """
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    try:
+        aluno = modelo_aluno.eliminar(aluno_id, ObjectId(g.utilizador["id"]))
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível eliminar o aluno.",
+        }), 503
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    publicar("aluno.eliminado", {"aluno_id": str(aluno["_id"])})
+
+    return jsonify({
+        "id": str(aluno["_id"]),
+        "eliminado": True,
     }), 200
 
 
@@ -371,7 +439,8 @@ def listar_encarregados_aluno(aluno_id):
             {
                 "id": str(documento["_id"]),
                 "nome": documento.get("nome"),
-                "telefone": documento.get("telefone", ""),
+                "cc": documento.get("cc", ""),
+                "telemovel": documento.get("telemovel", ""),
             }
             for documento in documentos
         ]

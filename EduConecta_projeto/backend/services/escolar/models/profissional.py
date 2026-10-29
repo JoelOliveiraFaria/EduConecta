@@ -7,14 +7,15 @@ from db import database
 colecao = database["profissionais"]
 
 
-def existe_por_utilizador(utilizador_id):
-    """True/documento se esta conta já tiver um registo de profissional (evita duplicados)."""
-    return colecao.find_one({"utilizador_id": utilizador_id}, {"_id": 1})
-
-
-def criar(utilizador_id, nome, perfil):
-    """Insere um profissional novo, ligado a uma conta de utilizador já existente no auth."""
-    profissional = {"utilizador_id": utilizador_id, "nome": nome, "perfil": perfil}
+def criar(utilizador_id, nome, perfil, cc, telemovel):
+    """Insere um profissional novo, já ligado à conta de utilizador criada no auth."""
+    profissional = {
+        "utilizador_id": utilizador_id,
+        "nome": nome,
+        "perfil": perfil,
+        "cc": cc,
+        "telemovel": telemovel,
+    }
     resultado = colecao.insert_one(profissional)
     return resultado.inserted_id, profissional
 
@@ -23,7 +24,7 @@ def listar():
     """Até 50 profissionais, por nome."""
     return (
         colecao
-        .find({}, {"nome": 1, "perfil": 1, "utilizador_id": 1})
+        .find({}, {"nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1})
         .sort([("nome", 1), ("_id", 1)])
         .limit(50)
     )
@@ -33,7 +34,7 @@ def obter(profissional_id):
     """Devolve um profissional pelo id, ou None se não existir."""
     return colecao.find_one(
         {"_id": ObjectId(profissional_id)},
-        {"nome": 1, "perfil": 1, "utilizador_id": 1},
+        {"nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1},
     )
 
 
@@ -41,6 +42,15 @@ def obter_por_utilizador(utilizador_id):
     """Encontra o registo de profissional ligado a esta conta de utilizador (sessão atual)."""
     return colecao.find_one(
         {"utilizador_id": utilizador_id},
+        {"nome": 1, "perfil": 1, "utilizador_id": 1},
+    )
+
+
+def listar_por_ids(ids):
+    """Profissionais cujo _id está na lista dada (usado para resolver os
+    profissionais atribuídos a uma turma)."""
+    return colecao.find(
+        {"_id": {"$in": list(ids)}},
         {"nome": 1, "perfil": 1, "utilizador_id": 1},
     )
 

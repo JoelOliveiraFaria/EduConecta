@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017")
 os.environ.setdefault("MONGO_COMUNICADOS_DATABASE", "comunicados_test")
+os.environ.setdefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 
 import pytest
 

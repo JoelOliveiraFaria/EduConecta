@@ -52,13 +52,18 @@ components:
         id: { type: string }
         nome: { type: string }
         ano_letivo: { type: string, example: "2025/2026" }
+        tipo:
+          type: string
+          enum: [creche, basico]
+          description: "creche aceita diário e faltas; basico só aceita faltas."
 
     Encarregado:
       type: object
       properties:
         id: { type: string }
         nome: { type: string }
-        telefone: { type: string }
+        cc: { type: string, description: "Número do cartão de cidadão." }
+        telemovel: { type: string }
 
     Profissional:
       type: object
@@ -66,6 +71,8 @@ components:
         id: { type: string }
         nome: { type: string }
         perfil: { type: string, enum: [docente, educadora, auxiliar] }
+        cc: { type: string, description: "Número do cartão de cidadão." }
+        telemovel: { type: string }
         utilizador_id: { type: string, nullable: true }
 
   responses:
@@ -223,7 +230,10 @@ paths:
         "503": { $ref: '#/components/responses/ServicoIndisponivel' }
     patch:
       summary: Atualizar aluno
-      description: "Atualização parcial de nome e/ou numero_processo. **Perfil: admin apenas.**"
+      description: >-
+        Atualização parcial de nome e/ou numero_processo. **Perfil: admin, ou
+        um profissional (docente/educadora/auxiliar) atribuído à turma atual
+        do aluno** — um profissional de outra turma recebe 403.
       tags: [alunos]
       requestBody:
         required: true
@@ -243,9 +253,14 @@ paths:
               schema: { $ref: '#/components/schemas/Aluno' }
         "400": { $ref: '#/components/responses/JsonInvalido' }
         "401": { $ref: '#/components/responses/NaoAutenticado' }
-        "403": { $ref: '#/components/responses/SemPermissao' }
+        "403":
+          description: >-
+            Perfil sem permissão, ou profissional não atribuído à turma do
+            aluno (error forbidden).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "404":
-          description: Aluno não encontrado.
+          description: Aluno não encontrado (ou já eliminado).
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "409":
@@ -253,6 +268,32 @@ paths:
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "415": { $ref: '#/components/responses/JsonInvalido' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+    delete:
+      summary: Eliminar aluno
+      description: >-
+        Soft delete (RF10) — o aluno fica marcado como eliminado e deixa de
+        aparecer em qualquer consulta, mas o documento não é removido da
+        base de dados. **Perfil: admin apenas.** Registos de outros serviços
+        (diário, assiduidade) que referenciam este aluno não são afetados.
+      tags: [alunos]
+      responses:
+        "200":
+          description: Aluno eliminado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  eliminado: { type: boolean, example: true }
+        "400": { $ref: '#/components/responses/JsonInvalido' }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
+        "404":
+          description: Aluno não encontrado (ou já estava eliminado).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "503": { $ref: '#/components/responses/ServicoIndisponivel' }
 
   /alunos/{aluno_id}/turma:
@@ -405,6 +446,8 @@ paths:
       description: >
         Cria uma turma. **Perfil: admin apenas.** ano_letivo tem de ter o
         formato "AAAA/AAAA" com dois anos consecutivos (ex: "2025/2026").
+        tipo é obrigatório: "creche" (aceita diário e faltas) ou "basico"
+        (só aceita faltas — o serviço diario recusa turmas deste tipo).
       tags: [turmas]
       requestBody:
         required: true
@@ -412,10 +455,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nome, ano_letivo]
+              required: [nome, ano_letivo, tipo]
               properties:
                 nome: { type: string, minLength: 1, maxLength: 100 }
                 ano_letivo: { type: string, example: "2025/2026" }
+                tipo: { type: string, enum: [creche, basico] }
       responses:
         "201":
           description: Turma criada.
@@ -447,6 +491,52 @@ paths:
                   limite: { type: integer }
         "401": { $ref: '#/components/responses/NaoAutenticado' }
         "403": { $ref: '#/components/responses/SemPermissao' }
+        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+
+  /turmas/{turma_id}:
+    get:
+      summary: Consultar detalhe de uma turma
+      description: >-
+        Devolve a turma e os profissionais atribuídos. Não há distinção
+        entre eles (ex: "diretor de turma") — qualquer um pode fazer tudo o
+        que a turma permite ao seu perfil, incluindo decidir justificações de
+        faltas no serviço assiduidade. **Perfil: admin (qualquer turma), ou
+        um profissional atribuído a essa turma** — para as restantes, devolve
+        404 em vez de 403, para não revelar que a turma existe a quem não tem
+        acesso.
+      tags: [turmas]
+      parameters:
+        - name: turma_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalhe da turma.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Turma'
+                  - type: object
+                    properties:
+                      profissionais:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            nome: { type: string }
+                            perfil: { type: string, enum: [docente, educadora, auxiliar] }
+        "400":
+          description: turma_id inválido.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "404":
+          description: Turma não encontrada (ou não acessível a este profissional).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "503": { $ref: '#/components/responses/ServicoIndisponivel' }
 
   /turmas/{turma_id}/alunos:
@@ -490,7 +580,9 @@ paths:
         Atribui um profissional a uma turma. **Perfil: admin apenas.** Antes
         de gravar, confirma junto do serviço auth que a conta ligada ao
         profissional está ativa e que o perfil da conta ainda corresponde ao
-        perfil guardado no registo profissional.
+        perfil guardado no registo profissional. Uma turma só pode ter um
+        docente (perfil "docente") atribuído de cada vez — não há limite
+        para educadora/auxiliar.
       tags: [turmas, profissionais]
       parameters:
         - name: turma_id
@@ -523,7 +615,11 @@ paths:
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "409":
-          description: Profissional sem conta válida associada, ou conta inativa/perfil não corresponde.
+          description: >-
+            Profissional sem conta válida associada, ou conta
+            inativa/perfil não corresponde (error account_not_valid), ou a
+            turma já tem um docente atribuído e este profissional também é
+            docente (error class_already_has_teacher).
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "503": { $ref: '#/components/responses/ServicoIndisponivel' }
@@ -598,10 +694,15 @@ paths:
 
   /encarregados:
     post:
-      summary: Criar encarregado de educação
+      summary: Criar encarregado de educação (+ conta de login)
       description: >
-        Cria um registo de encarregado de educação, ainda sem conta de login
-        associada (ver PUT /encarregados/{id}/utilizador). **Perfil: admin apenas.**
+        Cria o registo de encarregado de educação E a sua conta de login
+        (perfil "encarregado") num único pedido: o serviço auth gera a
+        conta e envia uma password temporária para o email indicado, tal
+        como já acontece para docentes/educadoras/auxiliares em
+        POST /admin/utilizadores (serviço auth). **Perfil: admin apenas.**
+        PUT /encarregados/{id}/utilizador continua a existir, mas só serve
+        para ligar uma conta já existente — não é preciso para o fluxo normal.
       tags: [encarregados]
       requestBody:
         required: true
@@ -609,20 +710,41 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nome]
+              required: [nome, email, cc]
               properties:
                 nome: { type: string, minLength: 2, maxLength: 150 }
-                telefone: { type: string, maxLength: 30 }
+                email: { type: string, format: email }
+                cc: { type: string, minLength: 5, maxLength: 30, description: "Número do cartão de cidadão." }
+                telemovel: { type: string, maxLength: 30 }
       responses:
         "201":
-          description: Encarregado criado.
+          description: Encarregado e conta de login criados; email com a password temporária enviado.
           content:
-            application/json: { schema: { $ref: '#/components/schemas/Encarregado' } }
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Encarregado'
+                  - type: object
+                    properties:
+                      utilizador_id: { type: string }
+                      email: { type: string }
+                      estado: { type: string }
+                      deve_alterar_password: { type: boolean }
         "400": { $ref: '#/components/responses/JsonInvalido' }
         "401": { $ref: '#/components/responses/NaoAutenticado' }
         "403": { $ref: '#/components/responses/SemPermissao' }
+        "409":
+          description: Já existe uma conta com esse email (error email_already_registered).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "415": { $ref: '#/components/responses/JsonInvalido' }
-        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+        "503":
+          description: >-
+            Serviço auth indisponível, email não configurado, ou base de
+            dados indisponível (nesse último caso, a conta de login pode já
+            ter sido criada — ver utilizador_id na resposta).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
     get:
       summary: Listar encarregados de educação
       description: "Lista até 50 encarregados de educação. **Perfil: admin apenas.**"
@@ -735,13 +857,12 @@ paths:
 
   /profissionais:
     post:
-      summary: Criar profissional
+      summary: Criar profissional (+ conta de login)
       description: >
-        Cria o registo de profissional ligado a uma conta já existente no
-        auth (confirma que o perfil é docente/educadora/auxiliar e que está
-        ativa). **Perfil: admin apenas.** O registo copia nome e perfil da
-        conta no momento da criação — não fica sincronizado automaticamente
-        depois.
+        Cria o registo de profissional (docente, educadora ou auxiliar) E a
+        sua conta de login, num único pedido: o auth cria a conta com o
+        perfil indicado e envia uma password temporária para o email —
+        mesmo fluxo de POST /encarregados. **Perfil: admin apenas.**
       tags: [profissionais]
       requestBody:
         required: true
@@ -749,27 +870,46 @@ paths:
           application/json:
             schema:
               type: object
-              required: [utilizador_id]
+              required: [nome, email, cc, perfil]
               properties:
-                utilizador_id: { type: string }
+                nome: { type: string, minLength: 2, maxLength: 150 }
+                email: { type: string, format: email }
+                cc: { type: string, minLength: 5, maxLength: 30, description: "Número do cartão de cidadão." }
+                telemovel: { type: string, maxLength: 30 }
+                perfil: { type: string, enum: [docente, educadora, auxiliar] }
       responses:
         "201":
-          description: Profissional criado.
+          description: Profissional e conta de login criados; email com a password temporária enviado.
           content:
-            application/json: { schema: { $ref: '#/components/schemas/Profissional' } }
-        "400": { $ref: '#/components/responses/JsonInvalido' }
-        "401": { $ref: '#/components/responses/NaoAutenticado' }
-        "403": { $ref: '#/components/responses/SemPermissao' }
-        "404":
-          description: Conta de utilizador não existe no auth.
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Profissional'
+                  - type: object
+                    properties:
+                      cc: { type: string }
+                      telemovel: { type: string }
+                      email: { type: string }
+                      estado: { type: string }
+                      deve_alterar_password: { type: boolean }
+        "400":
+          description: Campo em falta/inválido (nome, email, cc, telemovel ou perfil).
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
+        "401": { $ref: '#/components/responses/NaoAutenticado' }
+        "403": { $ref: '#/components/responses/SemPermissao' }
         "409":
-          description: Perfil inválido, conta inativa, ou esta conta já tem registo profissional.
+          description: Já existe uma conta com esse email (error email_already_registered).
           content:
             application/json: { schema: { $ref: '#/components/schemas/Erro' } }
         "415": { $ref: '#/components/responses/JsonInvalido' }
-        "503": { $ref: '#/components/responses/ServicoIndisponivel' }
+        "503":
+          description: >-
+            Serviço auth indisponível, email não configurado, ou base de
+            dados indisponível (a conta de login pode já ter sido criada —
+            ver utilizador_id na resposta).
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Erro' } }
     get:
       summary: Listar profissionais
       description: "Lista até 50 profissionais. **Perfil: admin apenas.**"

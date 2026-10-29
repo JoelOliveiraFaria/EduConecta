@@ -39,6 +39,11 @@ def test_publicar_sucesso(client, monkeypatch):
         "criado_em": datetime.now(timezone.utc),
     }
     monkeypatch.setattr(modelo_comunicado, "criar", MagicMock(return_value=documento))
+    eventos_publicados = []
+    monkeypatch.setattr(
+        comunicado_controller, "publicar",
+        lambda routing_key, payload: eventos_publicados.append((routing_key, payload)),
+    )
 
     resposta = client.post(
         f"/turmas/{TURMA_ID}/comunicados",
@@ -48,6 +53,10 @@ def test_publicar_sucesso(client, monkeypatch):
     assert resposta.status_code == 201
     corpo = resposta.get_json()
     assert corpo["titulo"] == "Reunião"
+    assert eventos_publicados == [(
+        "comunicado.criado",
+        {"comunicado_id": str(documento["_id"]), "turma_id": TURMA_ID, "titulo": "Reunião"},
+    )]
 
 
 def test_listar_query_invalida(client, monkeypatch):
@@ -66,3 +75,70 @@ def test_listar_sucesso(client, monkeypatch):
     corpo = resposta.get_json()
     assert corpo["comunicados"] == []
     assert resposta.headers["Cache-Control"] == "no-store"
+
+
+COMUNICADO_ID = str(ObjectId())
+
+
+def test_atualizar_sem_campos(client, monkeypatch):
+    monkeypatch.setattr(comunicado_controller, "verificar_acesso", _acesso_concedido)
+    resposta = client.patch(f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}", json={})
+    assert resposta.status_code == 400
+
+
+def test_atualizar_sucesso(client, monkeypatch):
+    monkeypatch.setattr(comunicado_controller, "verificar_acesso", _acesso_concedido)
+
+    documento = {
+        "_id": ObjectId(COMUNICADO_ID),
+        "turma_id": TURMA_ID,
+        "titulo": "Novo título",
+        "texto": "Texto original.",
+        "criado_em": datetime.now(timezone.utc),
+    }
+    monkeypatch.setattr(modelo_comunicado, "atualizar", MagicMock(return_value=documento))
+
+    resposta = client.patch(
+        f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}",
+        json={"titulo": "Novo título"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.get_json()["titulo"] == "Novo título"
+
+
+def test_atualizar_nao_autor_da_404(client, monkeypatch):
+    monkeypatch.setattr(comunicado_controller, "verificar_acesso", _acesso_concedido)
+    monkeypatch.setattr(modelo_comunicado, "atualizar", MagicMock(return_value=None))
+
+    resposta = client.patch(
+        f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}",
+        json={"titulo": "Novo título"},
+    )
+
+    assert resposta.status_code == 404
+
+
+def test_eliminar_sucesso_limpa_anexos(client, monkeypatch):
+    monkeypatch.setattr(comunicado_controller, "verificar_acesso", _acesso_concedido)
+    monkeypatch.setattr(modelo_comunicado, "eliminar", MagicMock(return_value=True))
+    limpeza = MagicMock()
+    monkeypatch.setattr(comunicado_controller.modelo_anexo, "eliminar_anexos_comunicado", limpeza)
+
+    resposta = client.delete(f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}")
+
+    assert resposta.status_code == 200
+    assert resposta.get_json()["eliminado"] is True
+    limpeza.assert_called_once()
+
+
+def test_eliminar_nao_autor_da_404(client, monkeypatch):
+    monkeypatch.setattr(comunicado_controller, "verificar_acesso", _acesso_concedido)
+    monkeypatch.setattr(modelo_comunicado, "eliminar", MagicMock(return_value=False))
+    limpeza = MagicMock()
+    monkeypatch.setattr(comunicado_controller.modelo_anexo, "eliminar_anexos_comunicado", limpeza)
+
+    resposta = client.delete(f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}")
+
+    assert resposta.status_code == 404
+    limpeza.assert_not_called()

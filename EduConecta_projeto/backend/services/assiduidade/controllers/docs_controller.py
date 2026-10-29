@@ -15,11 +15,11 @@ _PAGINA_SWAGGER = """<!doctype html>
 <head>
   <meta charset="utf-8" />
   <title>EduConecta - assiduidade - API docs</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.19.1/swagger-ui.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.19.1/swagger-ui-bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>
   <script>
     window.onload = function () {
       window.ui = SwaggerUIBundle({

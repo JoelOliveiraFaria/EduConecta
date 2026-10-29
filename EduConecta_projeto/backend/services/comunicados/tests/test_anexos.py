@@ -39,14 +39,15 @@ def test_obter_foto_id_invalido(client, monkeypatch):
     assert resposta.status_code == 400
 
 
-def test_carregar_video_sem_multipart(client, monkeypatch):
-    monkeypatch.setattr(anexo_controller, "verificar_acesso", _acesso_concedido)
-    monkeypatch.setattr(
-        "models.comunicado.obter_editavel", MagicMock(return_value={"_id": ObjectId()})
-    )
-
+def test_rota_de_video_em_comunicado_ja_nao_existe(client):
+    """Vídeo deixou de ser um anexo de comunicado — passou para mensagens de
+    chat (ver test_chat.py). Confirma que a rota antiga não existe mais."""
     resposta = client.post(
         f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}/videos", json={}
     )
+    assert resposta.status_code == 404
 
-    assert resposta.status_code == 415
+    resposta = client.get(
+        f"/turmas/{TURMA_ID}/comunicados/{COMUNICADO_ID}/videos"
+    )
+    assert resposta.status_code == 404

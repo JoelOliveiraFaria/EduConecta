@@ -6,12 +6,19 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import models.encarregado as modelo_encarregado
 from controllers.blueprint import bp
-from utils.auth_client import obter_conta_para_associacao
+from utils.auth_client import criar_conta_utilizador, obter_conta_para_associacao
+from utils.validacao import validar_cc, validar_email_superficial, validar_telemovel
 
 
 @bp.post("/encarregados")
 def criar_encarregado():
-    """Cria um registo de encarregado de educação (ainda sem conta de login associada)."""
+    """Cria um encarregado de educação E a sua conta de login, num único
+    pedido: o auth cria a conta (perfil "encarregado") e envia uma password
+    temporária para o email indicado — tal como já acontece para docentes/
+    educadoras/auxiliares em POST /admin/utilizadores. Não é preciso nenhum
+    passo manual a seguir (PUT .../utilizador continua a existir, mas é só
+    para ligar uma conta já existente a um encarregado, não é o caminho
+    normal)."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -26,14 +33,22 @@ def criar_encarregado():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
-    if set(dados) - {"nome", "telefone"}:
+    campos_permitidos = {"nome", "email", "cc", "telemovel"}
+    obrigatorios = {"nome", "email", "cc"}
+
+    if set(dados) - campos_permitidos or obrigatorios - set(dados):
         return jsonify({
-            "error": "unknown_fields",
-            "message": "Os campos permitidos são nome e telefone.",
+            "error": "invalid_fields",
+            "message": (
+                "Os campos nome, email e cc são obrigatórios; "
+                "telemovel é opcional. Não são permitidos outros campos."
+            ),
         }), 400
 
     nome = dados.get("nome")
-    telefone = dados.get("telefone", "")
+    email = dados.get("email")
+    cc = dados.get("cc")
+    telemovel = dados.get("telemovel", "")
 
     if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
         return jsonify({
@@ -41,25 +56,56 @@ def criar_encarregado():
             "message": "O nome deve ser texto com 2 a 150 caracteres.",
         }), 400
 
-    if not isinstance(telefone, str) or len(telefone.strip()) > 30:
+    if not validar_cc(cc):
         return jsonify({
-            "error": "invalid_phone",
-            "message": "O telefone deve ser texto com até 30 caracteres.",
+            "error": "invalid_cc",
+            "message": "O número de cartão de cidadão deve ser texto com 5 a 30 caracteres.",
         }), 400
 
+    if not validar_telemovel(telemovel):
+        return jsonify({
+            "error": "invalid_phone",
+            "message": "O telemóvel deve ser texto com até 30 caracteres.",
+        }), 400
+
+    if not validar_email_superficial(email):
+        return jsonify({
+            "error": "invalid_email",
+            "message": "Indica um email válido.",
+        }), 400
+
+    conta, erro = criar_conta_utilizador(
+        nome.strip(), email.strip(), "encarregado", request.headers.get("Authorization", "")
+    )
+
+    if erro is not None:
+        return erro
+
     try:
-        inserted_id, encarregado = modelo_encarregado.criar(nome.strip(), telefone.strip())
+        inserted_id, encarregado = modelo_encarregado.criar(
+            nome.strip(), cc.strip(), telemovel.strip(), ObjectId(conta["id"])
+        )
 
     except PyMongoError:
         return jsonify({
             "error": "database_unavailable",
-            "message": "Não foi possível guardar o encarregado de educação.",
+            "message": (
+                "A conta de login foi criada e o email foi enviado, mas não foi "
+                "possível guardar o registo escolar do encarregado. Contacta a "
+                "administração — a conta já existe, não a voltes a criar."
+            ),
+            "utilizador_id": conta["id"],
         }), 503
 
     return jsonify({
         "id": str(inserted_id),
         "nome": encarregado["nome"],
-        "telefone": encarregado["telefone"],
+        "cc": encarregado["cc"],
+        "telemovel": encarregado["telemovel"],
+        "utilizador_id": str(encarregado["utilizador_id"]),
+        "email": conta.get("email"),
+        "estado": conta.get("estado"),
+        "deve_alterar_password": conta.get("deve_alterar_password"),
     }), 201
 
 
@@ -73,7 +119,8 @@ def listar_encarregados():
             {
                 "id": str(documento["_id"]),
                 "nome": documento.get("nome"),
-                "telefone": documento.get("telefone", ""),
+                "cc": documento.get("cc", ""),
+                "telemovel": documento.get("telemovel", ""),
             }
             for documento in documentos
         ]

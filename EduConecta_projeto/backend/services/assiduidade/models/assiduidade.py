@@ -123,6 +123,13 @@ def marcar_estado(aid, tid, dia, estado, versao, conta_id):
     )
 
 
+def obter_registo(aid, dia):
+    """Devolve o registo de assiduidade de um aluno num dia, ou None se não
+    existir (usado para confirmar que há mesmo uma falta antes de aceitar
+    uma justificação)."""
+    return registos.find_one({"_id": f"{aid}:{dia}"})
+
+
 def procurar_marcacoes_aluno(aid, inicio, fim):
     """Devolve, por data (string ISO), as marcações de um aluno entre
     `inicio` e `fim` (inclusive em ambas as pontas)."""

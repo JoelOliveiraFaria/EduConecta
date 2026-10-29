@@ -179,7 +179,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
         "409":
-          description: Já existe um registo para este aluno nesta data.
+          description: >-
+            Já existe um registo para este aluno nesta data (error
+            duplicate_record), ou a turma não é do tipo "creche" (error
+            class_type_not_supported — o diário não está disponível para
+            turmas do tipo "basico").
           content:
             application/json:
               schema:
@@ -231,6 +235,14 @@ paths:
           $ref: "#/components/responses/Proibido"
         "404":
           description: O aluno não foi encontrado entre os alunos acessíveis da turma.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "409":
+          description: >-
+            A turma não é do tipo "creche" (error class_type_not_supported)
+            — o diário não está disponível para turmas do tipo "basico".
           content:
             application/json:
               schema:
@@ -351,6 +363,14 @@ paths:
           $ref: "#/components/responses/Proibido"
         "404":
           description: O registo não existe, ou não pode ser editado por esta conta (não é o autor original).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "409":
+          description: >-
+            A turma não é do tipo "creche" (error class_type_not_supported)
+            — o diário não está disponível para turmas do tipo "basico".
           content:
             application/json:
               schema:

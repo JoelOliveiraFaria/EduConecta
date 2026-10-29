@@ -2,6 +2,8 @@ import os
 
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017")
 os.environ.setdefault("MONGO_ESCOLAR_DATABASE", "escolar_test")
+os.environ.setdefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+os.environ.setdefault("INTERNAL_SERVICE_KEY", "chave-de-teste")
 
 import pytest
 

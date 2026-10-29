@@ -15,9 +15,14 @@ from controllers.docs_controller import bp as docs_bp
 from controllers.health_controller import bp as health_bp
 from utils.http_client import consultar, erro
 
+import controllers.justificacao_controller  # noqa: F401  (regista rotas no assiduidade_bp)
+
 app = Flask(__name__)
 app.json.ensure_ascii = False
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+# 16KB chegava para o corpo JSON de marcar presenças, mas a justificação de
+# faltas (Fase 1) aceita um anexo até 5MB — por isso o limite sobe para
+# cobrir esse caso, mesmo as outras rotas continuando a enviar corpos pequenos.
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
 
 app.register_blueprint(health_bp)
 app.register_blueprint(docs_bp)
@@ -55,10 +60,16 @@ def autenticar():
         "assiduidade.consultar_turma": {"docente", "educadora"},
         "assiduidade.marcar": {"docente", "educadora"},
         "assiduidade.consultar_educando": {"encarregado"},
+        "assiduidade.submeter_justificacao": {"encarregado"},
+        "assiduidade.aprovar_justificacao": {"docente", "educadora"},
+        "assiduidade.rejeitar_justificacao": {"docente", "educadora"},
+        "assiduidade.consultar_justificacao": {"encarregado", "docente", "educadora"},
+        "assiduidade.obter_anexo_justificacao": {"encarregado", "docente", "educadora"},
     }
     if conta.get("perfil") not in permissoes.get(request.endpoint, set()):
         return erro("forbidden", "O teu perfil não pode realizar esta operação.", 403)
     g.conta_id = str(ObjectId(conta["id"]))
+    g.perfil = conta["perfil"]
 
 
 @app.after_request

@@ -31,6 +31,37 @@ dummy_password_hash = generate_password_hash(
 PERFIS_PERMITIDOS = {"admin", "encarregado", "docente", "educadora", "auxiliar"}
 
 
+async def _obter_admin_autenticado(utilizador_id):
+    """Confirma que a conta autenticada é um admin ativo e sem troca de
+    password pendente. Devolve (administrador, None) ou (None, resposta_erro).
+
+    Partilhado por todas as rotas /admin/utilizadores/* — extrai a mesma
+    verificação que antes estava duplicada em cada rota.
+    """
+    try:
+        administrador = await modelo_utilizador.obter_por_id(
+            utilizador_id, {"perfil": 1, "estado": 1, "deve_alterar_password": 1}
+        )
+    except PyMongoError:
+        return None, (jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível verificar a conta.",
+        }), 503)
+
+    if (
+        administrador is None
+        or administrador.get("estado") != "ativo"
+        or administrador.get("perfil") != "admin"
+        or administrador.get("deve_alterar_password")
+    ):
+        return None, (jsonify({
+            "error": "forbidden",
+            "message": "Esta operação exige uma conta de administrador autorizada.",
+        }), 403)
+
+    return administrador, None
+
+
 @bp.before_request
 async def bloquear_registo_publico():
     """Desativa o /registo público — só uma conta admin pode criar utilizadores
@@ -369,26 +400,10 @@ async def criar_utilizador_com_email():
     if erro is not None:
         return erro
 
-    try:
-        administrador = await modelo_utilizador.obter_por_id(
-            utilizador_id, {"perfil": 1, "estado": 1, "deve_alterar_password": 1}
-        )
-    except PyMongoError:
-        return jsonify({
-            "error": "database_unavailable",
-            "message": "Não foi possível verificar a conta.",
-        }), 503
+    _, erro = await _obter_admin_autenticado(utilizador_id)
 
-    if (
-        administrador is None
-        or administrador.get("estado") != "ativo"
-        or administrador.get("perfil") != "admin"
-        or administrador.get("deve_alterar_password")
-    ):
-        return jsonify({
-            "error": "forbidden",
-            "message": "Esta operação exige uma conta de administrador autorizada.",
-        }), 403
+    if erro is not None:
+        return erro
 
     if not request.is_json:
         return jsonify({
@@ -534,22 +549,12 @@ async def consultar_utilizador_administracao(conta_id):
             "message": "O identificador da conta é inválido.",
         }), 400
 
+    _, erro = await _obter_admin_autenticado(administrador_id)
+
+    if erro is not None:
+        return erro
+
     try:
-        administrador = await modelo_utilizador.obter_por_id(
-            administrador_id, {"perfil": 1, "estado": 1, "deve_alterar_password": 1}
-        )
-
-        if (
-            administrador is None
-            or administrador.get("perfil") != "admin"
-            or administrador.get("estado") != "ativo"
-            or administrador.get("deve_alterar_password")
-        ):
-            return jsonify({
-                "error": "forbidden",
-                "message": "Esta operação exige uma conta de administrador autorizada.",
-            }), 403
-
         utilizador = await modelo_utilizador.obter_por_id(
             conta_id, {"nome": 1, "email": 1, "perfil": 1, "estado": 1}
         )
@@ -573,3 +578,284 @@ async def consultar_utilizador_administracao(conta_id):
         "perfil": utilizador.get("perfil"),
         "estado": utilizador.get("estado"),
     }), 200
+
+
+@bp.patch("/admin/utilizadores/<conta_id>")
+async def editar_utilizador(conta_id):
+    """Edita nome, email e/ou perfil de uma conta existente (RF04, admin apenas).
+
+    Pelo menos um campo tem de ser enviado. Se o email mudar, não pode
+    colidir com o de outra conta. Uma conta com estado 'eliminado' não pode
+    ser editada — trata-se como inexistente (404), para não revelar que
+    existiu em tempos.
+    """
+    utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
+
+    if erro is not None:
+        return erro
+
+    _, erro = await _obter_admin_autenticado(utilizador_id)
+
+    if erro is not None:
+        return erro
+
+    if not ObjectId.is_valid(conta_id):
+        return jsonify({
+            "error": "invalid_user_id",
+            "message": "O identificador da conta é inválido.",
+        }), 400
+
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Envia Content-Type: application/json.",
+        }), 415
+
+    dados = await request.get_json(silent=True)
+
+    campos_permitidos = {"nome", "email", "perfil"}
+
+    if not isinstance(dados, dict) or not dados or set(dados) - campos_permitidos:
+        return jsonify({
+            "error": "invalid_fields",
+            "message": "Envia pelo menos um dos campos nome, email ou perfil.",
+        }), 400
+
+    alteracoes = {}
+    email_normalizado = None
+
+    if "nome" in dados:
+        nome = dados["nome"]
+
+        if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
+            return jsonify({
+                "error": "invalid_name",
+                "message": "O nome deve ter entre 2 e 150 caracteres.",
+            }), 400
+
+        alteracoes["nome"] = nome.strip()
+
+    if "email" in dados:
+        email = dados["email"]
+
+        if not isinstance(email, str) or len(email) > 254:
+            return jsonify({
+                "error": "invalid_email",
+                "message": "Indica um email válido.",
+            }), 400
+
+        try:
+            email_normalizado = validate_email(email.strip(), check_deliverability=False).normalized.lower()
+
+        except EmailNotValidError:
+            return jsonify({
+                "error": "invalid_email",
+                "message": "Indica um email válido.",
+            }), 400
+
+        alteracoes["email"] = email_normalizado
+
+    if "perfil" in dados:
+        perfil = dados["perfil"]
+
+        if not isinstance(perfil, str) or perfil not in PERFIS_PERMITIDOS:
+            return jsonify({
+                "error": "invalid_profile",
+                "message": "Os perfis disponíveis são admin, encarregado, docente, educadora e auxiliar.",
+            }), 400
+
+        alteracoes["perfil"] = perfil
+
+    try:
+        alvo = await modelo_utilizador.obter_por_id(conta_id, {"estado": 1})
+
+        if alvo is None or alvo.get("estado") == "eliminado":
+            return jsonify({
+                "error": "user_not_found",
+                "message": "Conta de utilizador não encontrada.",
+            }), 404
+
+        if email_normalizado is not None:
+            existente = await modelo_utilizador.existe_email(email_normalizado, excluir_id=conta_id)
+
+            if existente is not None:
+                return jsonify({
+                    "error": "email_already_registered",
+                    "message": "Já existe uma conta com esse email.",
+                }), 409
+
+        utilizador = await modelo_utilizador.atualizar_dados(conta_id, alteracoes)
+
+    except DuplicateKeyError:
+        return jsonify({
+            "error": "email_already_registered",
+            "message": "Já existe uma conta com esse email.",
+        }), 409
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível editar a conta.",
+        }), 503
+
+    return jsonify({
+        "id": str(utilizador["_id"]),
+        "nome": utilizador["nome"],
+        "email": utilizador["email"],
+        "perfil": utilizador["perfil"],
+        "estado": utilizador["estado"],
+    }), 200
+
+
+@bp.post("/admin/utilizadores/<conta_id>/desativar")
+async def desativar_utilizador(conta_id):
+    """Desativa temporariamente uma conta (RF05): estado -> 'inativo'.
+
+    Reversível via /reativar. Só é possível a partir de 'ativo'. Um admin
+    não pode desativar a sua própria conta.
+    """
+    utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
+
+    if erro is not None:
+        return erro
+
+    _, erro = await _obter_admin_autenticado(utilizador_id)
+
+    if erro is not None:
+        return erro
+
+    if not ObjectId.is_valid(conta_id):
+        return jsonify({
+            "error": "invalid_user_id",
+            "message": "O identificador da conta é inválido.",
+        }), 400
+
+    if ObjectId(conta_id) == ObjectId(utilizador_id):
+        return jsonify({
+            "error": "cannot_act_on_self",
+            "message": "Não podes desativar a tua própria conta.",
+        }), 403
+
+    try:
+        alvo = await modelo_utilizador.obter_por_id(conta_id, {"estado": 1})
+
+        if alvo is None:
+            return jsonify({
+                "error": "user_not_found",
+                "message": "Conta de utilizador não encontrada.",
+            }), 404
+
+        if alvo.get("estado") != "ativo":
+            return jsonify({
+                "error": "invalid_state_transition",
+                "message": f"A conta está em estado '{alvo.get('estado')}' e não pode ser desativada a partir daí.",
+            }), 409
+
+        utilizador = await modelo_utilizador.desativar(conta_id)
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível desativar a conta.",
+        }), 503
+
+    return jsonify({"id": str(utilizador["_id"]), "estado": utilizador["estado"]}), 200
+
+
+@bp.post("/admin/utilizadores/<conta_id>/reativar")
+async def reativar_utilizador(conta_id):
+    """Reverte uma desativação (RF05): estado -> 'ativo'.
+
+    Só é possível a partir de 'inativo' — uma conta 'eliminada' não pode
+    ser reativada por aqui (eliminação não é reversível por este caminho).
+    """
+    utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
+
+    if erro is not None:
+        return erro
+
+    _, erro = await _obter_admin_autenticado(utilizador_id)
+
+    if erro is not None:
+        return erro
+
+    if not ObjectId.is_valid(conta_id):
+        return jsonify({
+            "error": "invalid_user_id",
+            "message": "O identificador da conta é inválido.",
+        }), 400
+
+    try:
+        alvo = await modelo_utilizador.obter_por_id(conta_id, {"estado": 1})
+
+        if alvo is None:
+            return jsonify({
+                "error": "user_not_found",
+                "message": "Conta de utilizador não encontrada.",
+            }), 404
+
+        if alvo.get("estado") != "inativo":
+            return jsonify({
+                "error": "invalid_state_transition",
+                "message": f"A conta está em estado '{alvo.get('estado')}' e não pode ser reativada a partir daí.",
+            }), 409
+
+        utilizador = await modelo_utilizador.reativar(conta_id)
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível reativar a conta.",
+        }), 503
+
+    return jsonify({"id": str(utilizador["_id"]), "estado": utilizador["estado"]}), 200
+
+
+@bp.delete("/admin/utilizadores/<conta_id>")
+async def eliminar_utilizador(conta_id):
+    """Elimina uma conta (RF06) — soft delete: estado -> 'eliminado', o
+    documento fica na base de dados para auditoria, nunca é removido.
+
+    Um admin não pode eliminar a sua própria conta. Uma conta já eliminada
+    responde 404, tal como uma que nunca existiu — não se distingue.
+    """
+    utilizador_id, erro = descodificar_token(request.headers.get("Authorization", ""))
+
+    if erro is not None:
+        return erro
+
+    _, erro = await _obter_admin_autenticado(utilizador_id)
+
+    if erro is not None:
+        return erro
+
+    if not ObjectId.is_valid(conta_id):
+        return jsonify({
+            "error": "invalid_user_id",
+            "message": "O identificador da conta é inválido.",
+        }), 400
+
+    if ObjectId(conta_id) == ObjectId(utilizador_id):
+        return jsonify({
+            "error": "cannot_act_on_self",
+            "message": "Não podes eliminar a tua própria conta.",
+        }), 403
+
+    try:
+        alvo = await modelo_utilizador.obter_por_id(conta_id, {"estado": 1})
+
+        if alvo is None or alvo.get("estado") == "eliminado":
+            return jsonify({
+                "error": "user_not_found",
+                "message": "Conta de utilizador não encontrada.",
+            }), 404
+
+        utilizador = await modelo_utilizador.eliminar(conta_id, utilizador_id)
+
+    except PyMongoError:
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "Não foi possível eliminar a conta.",
+        }), 503
+
+    return jsonify({"id": str(utilizador["_id"]), "estado": utilizador["estado"]}), 200

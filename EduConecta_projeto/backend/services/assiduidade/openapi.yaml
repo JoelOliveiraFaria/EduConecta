@@ -15,6 +15,11 @@ tags:
     description: Endpoints sem autenticação, usados pelo healthcheck do Docker.
   - name: Assiduidade
     description: Consulta e marcação de presenças/faltas.
+  - name: Justificações
+    description: >-
+      Justificação de faltas (RF18, RF20, RF21, RF22) — o encarregado
+      submete, e qualquer docente ou educadora atribuído à turma da falta
+      (ver `escolar: GET /turmas/{id}`) pode aprovar ou rejeitar.
 
 components:
   securitySchemes:
@@ -65,6 +70,21 @@ components:
           description: >-
             False se já existir uma marcação, mas pertencente a outra turma
             (caso raro, de um aluno transferido depois de já ter sido marcado).
+
+    Justificacao:
+      description: Estado da justificação de uma falta.
+      type: object
+      properties:
+        aluno_id: { type: string }
+        data: { type: string, format: date }
+        motivo: { type: string, nullable: true }
+        tem_anexo: { type: boolean }
+        estado:
+          type: string
+          enum: [pendente, aprovada, rejeitada]
+        motivo_rejeicao: { type: string, nullable: true }
+        submetida_em: { type: string, format: date-time }
+        decidida_em: { type: string, format: date-time, nullable: true }
 
     MarcacaoResposta:
       description: Resultado de PUT .../assiduidade/{dia} — a marcação já gravada.
@@ -368,3 +388,240 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErroPadrao" }
+
+  /alunos/{aluno_id}/faltas/{dia}/justificacao:
+    parameters:
+      - name: aluno_id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: dia
+        in: path
+        required: true
+        schema: { type: string, format: date }
+    post:
+      tags: [Justificações]
+      summary: Submeter justificação de uma falta
+      description: >-
+        RF20. **Perfil: encarregado de educação do aluno.** Envia pelo
+        menos um de `motivo` (texto) ou `anexo` (ficheiro, até 5MB) — pode
+        enviar os dois. Só é aceite se existir mesmo uma falta nesse dia e
+        o prazo de 3 dias úteis ainda não tiver passado; só pode ser
+        submetida uma vez por falta.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                motivo: { type: string, maxLength: 1000 }
+                anexo: { type: string, format: binary }
+      responses:
+        "201":
+          description: Justificação submetida (fica "pendente").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Justificacao" }
+        "400":
+          description: >-
+            Nem motivo nem anexo enviados, motivo demasiado longo, data
+            inválida, ou campos extra no formulário.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Educando não acessível, ou não existe falta registada nesse dia.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "409":
+          description: >-
+            Já existe justificação para esta falta (error already_submitted),
+            ou o prazo de 3 dias úteis já passou (error deadline_expired).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "413":
+          description: Anexo maior do que 5MB (error file_too_large).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "415":
+          description: Content-Type diferente de multipart/form-data.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+    get:
+      tags: [Justificações]
+      summary: Consultar justificação de uma falta
+      description: >-
+        RF19 (extensão). **Perfil: encarregado do aluno, ou docente/educadora
+        atribuído à turma da falta.**
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Estado da justificação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Justificacao" }
+        "400":
+          description: Identificador de aluno ou data inválidos.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Não existe justificação para esta falta, ou aluno não acessível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+
+  /alunos/{aluno_id}/faltas/{dia}/justificacao/anexo:
+    get:
+      tags: [Justificações]
+      summary: Descarregar o anexo de uma justificação
+      description: >-
+        **Perfil: encarregado do aluno, ou docente/educadora atribuído à
+        turma.** 404 se a justificação não tiver anexo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: dia
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Ficheiro binário do anexo.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400":
+          description: Identificador de aluno ou data inválidos.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/SemPermissao" }
+        "404":
+          description: Justificação sem anexo, ou não acessível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503":
+          description: Anexo inacessível/incompleto, dependência ou base de dados indisponível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+
+  /alunos/{aluno_id}/faltas/{dia}/justificacao/aprovar:
+    put:
+      tags: [Justificações]
+      summary: Aprovar justificação de falta
+      description: >-
+        RF18/RF21. **Perfil: docente ou educadora atribuído à turma a que a
+        falta pertence** (confirmado via `escolar: GET /me/turmas/{id}/alunos`)
+        — não há "diretor de turma": qualquer profissional atribuído à
+        turma pode decidir.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: dia
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Justificação aprovada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Justificacao" }
+        "400":
+          description: Identificador de aluno ou data inválidos.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403":
+          description: Perfil sem permissão, ou profissional não atribuído a esta turma.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "404":
+          description: Não existe justificação para esta falta (error justification_not_found).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "409":
+          description: Esta justificação já tinha sido decidida antes.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+
+  /alunos/{aluno_id}/faltas/{dia}/justificacao/rejeitar:
+    put:
+      tags: [Justificações]
+      summary: Rejeitar justificação de falta
+      description: >-
+        RF18/RF22. **Perfil: docente ou educadora atribuído à turma a que a
+        falta pertence** (mesma regra da aprovação). Exige
+        `motivo_rejeicao`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: aluno_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: dia
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo_rejeicao]
+              properties:
+                motivo_rejeicao: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200":
+          description: Justificação rejeitada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Justificacao" }
+        "400":
+          description: motivo_rejeicao em falta, vazio, ou demasiado longo.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403":
+          description: Perfil sem permissão, ou profissional não atribuído a esta turma.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "404":
+          description: Não existe justificação para esta falta.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "409":
+          description: Esta justificação já tinha sido decidida antes.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "415":
+          description: Content-Type diferente de application/json.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }
+        "503":
+          description: Dependência (`escolar`) ou base de dados indisponível.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroPadrao" } }

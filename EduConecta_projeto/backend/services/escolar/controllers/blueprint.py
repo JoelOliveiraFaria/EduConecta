@@ -43,6 +43,18 @@ PERMISSOES_PESSOAIS = {
     "escolar.listar_minhas_turmas": {"docente", "educadora", "auxiliar"},
     "escolar.listar_alunos_minha_turma": {"docente", "educadora", "auxiliar"},
     "escolar.validar_participantes_chat": {"docente", "educadora", "encarregado"},
+    # RF09: um profissional também pode editar um aluno (não só admin) — a
+    # verificação de que o aluno pertence mesmo a uma turma do profissional
+    # autenticado acontece dentro do próprio controller, não aqui (depende
+    # dos dados do aluno, não só do perfil de quem pede). "admin" tem de
+    # estar explícito aqui: ao entrar neste dict, a rota deixa de cair no
+    # "elif ... == admin" mais abaixo — sem isto, um admin ficaria bloqueado.
+    "escolar.atualizar_aluno": {"admin", "docente", "educadora", "auxiliar"},
+    # Consultar o detalhe de uma turma (incluindo o diretor de turma) é
+    # permitido a qualquer profissional atribuído a ela — o controller
+    # confirma essa atribuição antes de devolver os dados. Mesma nota sobre
+    # "admin" ter de estar explícito no conjunto.
+    "escolar.obter_turma": {"admin", "docente", "educadora", "auxiliar"},
 }
 
 

@@ -7,12 +7,14 @@ import models.anexo as modelo_anexo
 import models.comunicado as modelo_comunicado
 from db import MAX_FOTOGRAFIA_BYTES
 from utils.acesso import verificar_acesso
+from utils.eventos import publicar
 from utils.imagem import preparar_fotografia
 from utils.service_client import erro
 
-"""Controller: publicar e listar comunicados de uma turma, e anexar
-fotografias a um comunicado (vídeo fica em anexo_controller.py, que também
-trata de listar/descarregar os dois tipos de anexo)."""
+"""Controller: publicar, editar, eliminar e listar comunicados de uma turma,
+e anexar fotografias a um comunicado (listar/descarregar fotografias fica em
+anexo_controller.py; vídeo deixou de ser um anexo de comunicado — passou
+para mensagens de chat, ver chat_controller.py)."""
 
 bp = Blueprint("comunicados", __name__)
 
@@ -75,6 +77,12 @@ def publicar_comunicado(turma_id):
             "Não foi possível guardar o comunicado.",
             503,
         )
+
+    publicar("comunicado.criado", {
+        "comunicado_id": str(documento["_id"]),
+        "turma_id": g.turma_id,
+        "titulo": documento["titulo"],
+    })
 
     return jsonify(modelo_comunicado.serializar(documento)), 201
 
@@ -143,6 +151,138 @@ def listar_comunicados(turma_id):
         "limite": limite,
         "tem_mais": tem_mais,
     }), 200
+
+
+@bp.patch("/turmas/<turma_id>/comunicados/<comunicado_id>")
+def atualizar_comunicado(turma_id, comunicado_id):
+    """Atualização parcial de titulo e/ou texto — só o autor do comunicado."""
+    falha = verificar_acesso(turma_id, publicar=True)
+
+    if falha is not None:
+        return falha
+
+    if not ObjectId.is_valid(comunicado_id):
+        return erro(
+            "invalid_notice_id",
+            "O identificador do comunicado é inválido.",
+            400,
+        )
+
+    comunicado_canonico = str(ObjectId(comunicado_id))
+
+    if not request.is_json:
+        return erro(
+            "unsupported_media_type",
+            "Envia o pedido com Content-Type: application/json.",
+            415,
+        )
+
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return erro(
+            "invalid_json",
+            "O corpo do pedido deve ser um objeto JSON válido.",
+            400,
+        )
+
+    campos_permitidos = {"titulo", "texto"}
+
+    if not dados or set(dados) - campos_permitidos:
+        return erro(
+            "invalid_fields",
+            "Envia pelo menos um dos campos titulo e/ou texto.",
+            400,
+        )
+
+    alteracoes = {}
+
+    if "titulo" in dados:
+        titulo = dados["titulo"]
+
+        if not isinstance(titulo, str) or not 1 <= len(titulo.strip()) <= 150:
+            return erro(
+                "invalid_title",
+                "O título deve ter entre 1 e 150 caracteres.",
+                400,
+            )
+
+        alteracoes["titulo"] = titulo.strip()
+
+    if "texto" in dados:
+        texto = dados["texto"]
+
+        if not isinstance(texto, str) or not 1 <= len(texto.strip()) <= 5000:
+            return erro(
+                "invalid_text",
+                "O texto deve ter entre 1 e 5000 caracteres.",
+                400,
+            )
+
+        alteracoes["texto"] = texto.strip()
+
+    try:
+        documento = modelo_comunicado.atualizar(
+            comunicado_canonico, g.turma_id, g.utilizador_id, alteracoes
+        )
+
+    except PyMongoError:
+        return erro(
+            "database_unavailable",
+            "Não foi possível atualizar o comunicado.",
+            503,
+        )
+
+    if documento is None:
+        return erro(
+            "notice_not_editable",
+            "O comunicado não existe ou não é editável por esta conta.",
+            404,
+        )
+
+    return jsonify(modelo_comunicado.serializar(documento)), 200
+
+
+@bp.delete("/turmas/<turma_id>/comunicados/<comunicado_id>")
+def eliminar_comunicado(turma_id, comunicado_id):
+    """Elimina um comunicado e todos os seus anexos (GridFS) — só o autor."""
+    falha = verificar_acesso(turma_id, publicar=True)
+
+    if falha is not None:
+        return falha
+
+    if not ObjectId.is_valid(comunicado_id):
+        return erro(
+            "invalid_notice_id",
+            "O identificador do comunicado é inválido.",
+            400,
+        )
+
+    comunicado_canonico = str(ObjectId(comunicado_id))
+
+    try:
+        eliminado = modelo_comunicado.eliminar(
+            comunicado_canonico, g.turma_id, g.utilizador_id
+        )
+
+        if eliminado:
+            modelo_anexo.eliminar_anexos_comunicado(g.turma_id, comunicado_canonico)
+
+    except PyMongoError:
+        return erro(
+            "database_unavailable",
+            "Não foi possível eliminar o comunicado.",
+            503,
+        )
+
+    if not eliminado:
+        return erro(
+            "notice_not_editable",
+            "O comunicado não existe ou não é editável por esta conta.",
+            404,
+        )
+
+    return jsonify({"id": comunicado_canonico, "eliminado": True}), 200
 
 
 @bp.post(

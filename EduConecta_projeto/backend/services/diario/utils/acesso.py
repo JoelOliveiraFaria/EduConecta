@@ -94,12 +94,14 @@ def verificar_acesso(turma_id, aluno_id):
     """Confirma que quem está autenticado pode escrever/ler o Diário deste par
     turma+aluno.
 
-    Dois passos sequenciais: (1) o auth confirma que a conta está ativa e tem
+    Passos sequenciais: (1) o auth confirma que a conta está ativa e tem
     perfil profissional (docente/educadora/auxiliar); (2) o escolar confirma
     que esse profissional está mesmo atribuído a esta turma e que o aluno
-    pertence a ela. Como efeito colateral, guarda o id do utilizador em
-    `g.utilizador_id` para as rotas usarem (ex: campo `criado_por`).
-    Devolve None se o acesso é permitido, ou a resposta de erro a devolver.
+    pertence a ela; (3) a turma tem de ser do tipo "creche" — o diário não
+    se aplica a turmas de ensino básico. Como efeito colateral, guarda o id
+    do utilizador em `g.utilizador_id` para as rotas usarem (ex: campo
+    `criado_por`). Devolve None se o acesso é permitido, ou a resposta de
+    erro a devolver.
     """
     if not ObjectId.is_valid(turma_id):
         return erro(
@@ -140,12 +142,23 @@ def verificar_acesso(turma_id, aluno_id):
         return falha
 
     alunos = dados.get("alunos")
+    turma = dados.get("turma")
 
-    if not isinstance(alunos, list):
+    if not isinstance(alunos, list) or not isinstance(turma, dict):
         return erro(
             "dependency_unavailable",
             "O serviço escolar devolveu uma resposta inesperada.",
             503,
+        )
+
+    # O diário (alimentação, sono, higiene...) só se aplica a turmas de
+    # creche — turmas de ensino básico (tipo "basico") não têm esta
+    # funcionalidade, só assiduidade/faltas.
+    if turma.get("tipo") != "creche":
+        return erro(
+            "class_type_not_supported",
+            "O diário só está disponível para turmas do tipo creche.",
+            409,
         )
 
     aluno_canonico = str(ObjectId(aluno_id))

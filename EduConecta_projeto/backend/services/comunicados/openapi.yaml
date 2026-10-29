@@ -45,18 +45,6 @@ components:
         largura: { type: integer }
         altura: { type: integer }
 
-    AnexoVideo:
-      type: object
-      properties:
-        id: { type: string }
-        comunicado_id: { type: string }
-        turma_id: { type: string }
-        nome: { type: string }
-        tipo: { type: string, example: video/mp4 }
-        tamanho_bytes: { type: integer }
-        duracao_segundos: { type: number }
-        tem_audio: { type: boolean }
-
     ItemAnexoListado:
       type: object
       properties:
@@ -84,7 +72,16 @@ components:
       properties:
         id: { type: string }
         conversa_id: { type: string }
-        texto: { type: string }
+        tipo: { type: string, enum: [texto, fotografia, video] }
+        texto: { type: string, nullable: true, description: "Preenchido só quando tipo=texto." }
+        anexo:
+          nullable: true
+          description: "Preenchido só quando tipo=fotografia ou tipo=video."
+          type: object
+          properties:
+            id: { type: string }
+            tipo: { type: string, example: image/jpeg }
+            url: { type: string }
         enviada_por_mim: { type: boolean }
         criado_em: { type: string, format: date-time }
 
@@ -204,6 +201,57 @@ paths:
         "404": { $ref: "#/components/responses/404" }
         "503": { $ref: "#/components/responses/503" }
 
+  /turmas/{turma_id}/comunicados/{comunicado_id}:
+    parameters:
+      - { $ref: "#/components/parameters/turmaId" }
+      - { $ref: "#/components/parameters/comunicadoId" }
+    patch:
+      summary: Editar um comunicado
+      description: Atualização parcial de titulo e/ou texto — só o autor do comunicado.
+      tags: [comunicados]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                titulo: { type: string, minLength: 1, maxLength: 150 }
+                texto: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        "200": { description: Comunicado atualizado, content: { application/json: { schema: { $ref: "#/components/schemas/Comunicado" } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: "Comunicado não existe ou não é editável por esta conta", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+    delete:
+      summary: Eliminar um comunicado
+      description: >
+        Só o autor do comunicado. Elimina também todas as fotografias (e
+        vídeos, se existirem de antes desta operação ter sido removida de
+        comunicados) anexadas, do GridFS.
+      tags: [comunicados]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Comunicado eliminado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  eliminado: { type: boolean, example: true }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: "Comunicado não existe ou não é editável por esta conta", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "503": { $ref: "#/components/responses/503" }
+
   /turmas/{turma_id}/comunicados/{comunicado_id}/fotografias:
     parameters:
       - { $ref: "#/components/parameters/turmaId" }
@@ -285,93 +333,6 @@ paths:
           description: Binário JPEG
           content:
             image/jpeg: { schema: { type: string, format: binary } }
-        "400": { $ref: "#/components/responses/400" }
-        "401": { $ref: "#/components/responses/401" }
-        "403": { $ref: "#/components/responses/403" }
-        "404": { $ref: "#/components/responses/404" }
-        "503": { $ref: "#/components/responses/503" }
-
-  /turmas/{turma_id}/comunicados/{comunicado_id}/videos:
-    parameters:
-      - { $ref: "#/components/parameters/turmaId" }
-      - { $ref: "#/components/parameters/comunicadoId" }
-    post:
-      summary: Anexar um vídeo a um comunicado
-      description: >
-        Só o autor do comunicado. Faz streaming do upload para disco (corta
-        ao ultrapassar 25MB) e valida o ficheiro com ffprobe: tem de ser MP4
-        H.264, com áudio AAC opcional, sem pistas adicionais.
-      tags: [anexos]
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [video]
-              properties:
-                video: { type: string, format: binary }
-      responses:
-        "201": { description: Vídeo guardado, content: { application/json: { schema: { $ref: "#/components/schemas/AnexoVideo" } } } }
-        "400": { description: "Vídeo vazio, inválido ou análise excedeu 10s", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
-        "401": { $ref: "#/components/responses/401" }
-        "403": { $ref: "#/components/responses/403" }
-        "404": { $ref: "#/components/responses/404" }
-        "413": { description: "Vídeo maior que 25MB", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
-        "415": { $ref: "#/components/responses/415" }
-        "503": { description: "BD indisponível ou ffprobe/armazenamento temporário indisponível", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
-    get:
-      summary: Listar vídeos de um comunicado
-      tags: [anexos]
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - name: antes_de
-          in: query
-          schema: { type: string }
-          description: Cursor de paginação (ObjectId).
-      responses:
-        "200":
-          description: Página de vídeos
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  comunicado_id: { type: string }
-                  videos: { type: array, items: { $ref: "#/components/schemas/ItemAnexoListado" } }
-                  quantidade: { type: integer }
-                  limite: { type: integer, example: 20 }
-                  tem_mais: { type: boolean }
-                  proximo_cursor: { type: string, nullable: true }
-        "400": { $ref: "#/components/responses/400" }
-        "401": { $ref: "#/components/responses/401" }
-        "403": { $ref: "#/components/responses/403" }
-        "404": { $ref: "#/components/responses/404" }
-        "503": { $ref: "#/components/responses/503" }
-
-  /turmas/{turma_id}/comunicados/{comunicado_id}/videos/{video_id}:
-    parameters:
-      - { $ref: "#/components/parameters/turmaId" }
-      - { $ref: "#/components/parameters/comunicadoId" }
-      - name: video_id
-        in: path
-        required: true
-        schema: { type: string }
-    get:
-      summary: Ver/descarregar um vídeo
-      tags: [anexos]
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - name: download
-          in: query
-          schema: { type: string, enum: ["1"] }
-          description: "Com download=1, força Content-Disposition: attachment."
-      responses:
-        "200":
-          description: Binário MP4
-          content:
-            video/mp4: { schema: { type: string, format: binary } }
         "400": { $ref: "#/components/responses/400" }
         "401": { $ref: "#/components/responses/401" }
         "403": { $ref: "#/components/responses/403" }
@@ -502,4 +463,101 @@ paths:
         "401": { $ref: "#/components/responses/401" }
         "403": { $ref: "#/components/responses/403" }
         "404": { description: Conversa não existe/não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "503": { $ref: "#/components/responses/503" }
+
+  /conversas/{conversa_id}/mensagens/fotografia:
+    parameters:
+      - name: conversa_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+    post:
+      summary: Enviar uma mensagem de fotografia
+      description: >
+        Mesma conversão/validação que os anexos de comunicado usavam (Pillow:
+        reencode JPEG, remove EXIF, limite de 20 milhões de píxeis e 5MB).
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [fotografia]
+              properties:
+                fotografia: { type: string, format: binary }
+      responses:
+        "201": { description: Mensagem de fotografia enviada, content: { application/json: { schema: { $ref: "#/components/schemas/Mensagem" } } } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: Conversa não existe/não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "413": { description: "Fotografia maior que 5MB", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { $ref: "#/components/responses/503" }
+
+  /conversas/{conversa_id}/mensagens/video:
+    parameters:
+      - name: conversa_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+    post:
+      summary: Enviar uma mensagem de vídeo
+      description: >
+        Faz streaming do upload para disco (corta ao ultrapassar 25MB) e
+        valida com ffprobe: tem de ser MP4 H.264, com áudio AAC opcional,
+        sem pistas adicionais. Mesma lógica que os comunicados usavam antes
+        de o vídeo passar a ser um tipo de mensagem de chat.
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [video]
+              properties:
+                video: { type: string, format: binary }
+      responses:
+        "201": { description: Mensagem de vídeo enviada, content: { application/json: { schema: { $ref: "#/components/schemas/Mensagem" } } } }
+        "400": { description: "Vídeo vazio, inválido ou análise excedeu 10s", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: Conversa não existe/não acessível, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "413": { description: "Vídeo maior que 25MB", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+        "415": { $ref: "#/components/responses/415" }
+        "503": { description: "BD indisponível ou ffprobe/armazenamento temporário indisponível", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+
+  /conversas/{conversa_id}/mensagens/{mensagem_id}/anexo:
+    parameters:
+      - name: conversa_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+      - name: mensagem_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Descarregar o anexo (fotografia/vídeo) de uma mensagem
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: "Com download=1, força Content-Disposition: attachment."
+      responses:
+        "200":
+          description: Binário da fotografia (image/jpeg) ou do vídeo (video/mp4)
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            video/mp4: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/400" }
+        "401": { $ref: "#/components/responses/401" }
+        "403": { $ref: "#/components/responses/403" }
+        "404": { description: "Mensagem não existe nesta conversa, ou não tem anexo", content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
         "503": { $ref: "#/components/responses/503" }

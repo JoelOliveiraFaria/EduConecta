@@ -1,14 +1,34 @@
 name: educonecta
 
 services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   escolar:
     build:
       context: ./backend/services/escolar
     environment:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_ESCOLAR_DATABASE: ${MONGO_ESCOLAR_DATABASE:?Falta MONGO_ESCOLAR_DATABASE no .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Falta INTERNAL_SERVICE_KEY no .env}
     ports:
       - "127.0.0.1:5001:8000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -73,12 +93,15 @@ services:
     environment:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_COMUNICADOS_DATABASE: ${MONGO_COMUNICADOS_DATABASE:?Falta MONGO_COMUNICADOS_DATABASE no .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
     ports:
       - "127.0.0.1:5004:8000"
     depends_on:
       auth:
         condition: service_healthy
       escolar:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test:
@@ -97,12 +120,43 @@ services:
     environment:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_ASSIDUIDADE_DATABASE: ${MONGO_ASSIDUIDADE_DATABASE:?Falta MONGO_ASSIDUIDADE_DATABASE no .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
     ports:
       - "127.0.0.1:5005:8000"
     depends_on:
       auth:
         condition: service_healthy
       escolar:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/ready', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  notificacoes:
+    build:
+      context: ./backend/services/notificacoes
+    environment:
+      MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
+      MONGO_NOTIFICACOES_DATABASE: ${MONGO_NOTIFICACOES_DATABASE:?Falta MONGO_NOTIFICACOES_DATABASE no .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Falta INTERNAL_SERVICE_KEY no .env}
+    ports:
+      - "127.0.0.1:5006:8000"
+    depends_on:
+      auth:
+        condition: service_healthy
+      escolar:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test:
