@@ -83,3 +83,48 @@ def test_sem_profissionais_nem_encarregados(client, monkeypatch):
     corpo = resposta.get_json()
     assert corpo["profissionais_utilizador_ids"] == []
     assert corpo["encarregados_utilizador_ids"] == []
+
+
+def test_aluno_sem_chave_interna_bloqueado(client):
+    resposta = client.get(f"/internal/alunos/{ObjectId()}/destinatarios")
+    assert resposta.status_code == 403
+
+
+def test_aluno_id_invalido(client):
+    resposta = client.get("/internal/alunos/id-invalido/destinatarios", headers=CHAVE_INTERNA_HEADER)
+    assert resposta.status_code == 400
+    assert resposta.get_json()["error"] == "invalid_student_id"
+
+
+def test_aluno_nao_encontrado(client, monkeypatch):
+    import models.aluno as modelo_aluno
+
+    monkeypatch.setattr(modelo_aluno, "obter_com_encarregados", lambda aid: None)
+
+    resposta = client.get(f"/internal/alunos/{ObjectId()}/destinatarios", headers=CHAVE_INTERNA_HEADER)
+    assert resposta.status_code == 404
+    assert resposta.get_json()["error"] == "student_not_found"
+
+
+def test_resolve_encarregados_do_aluno(client, monkeypatch):
+    import models.aluno as modelo_aluno
+    import models.encarregado as modelo_encarregado
+
+    aluno_id = ObjectId()
+    enc_id = ObjectId()
+    enc_conta_id = ObjectId()
+
+    monkeypatch.setattr(
+        modelo_aluno, "obter_com_encarregados",
+        lambda aid: {"_id": aluno_id, "nome": "Ana", "encarregados_ids": [enc_id]},
+    )
+    monkeypatch.setattr(
+        modelo_encarregado, "listar_por_ids",
+        lambda ids: [{"_id": enc_id, "utilizador_id": enc_conta_id}, {"_id": ObjectId()}],
+    )
+
+    resposta = client.get(f"/internal/alunos/{aluno_id}/destinatarios", headers=CHAVE_INTERNA_HEADER)
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["aluno_nome"] == "Ana"
+    assert corpo["encarregados_utilizador_ids"] == [str(enc_conta_id)]

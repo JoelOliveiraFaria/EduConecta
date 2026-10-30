@@ -25,7 +25,7 @@ import pika
 
 import models.auditoria as modelo_auditoria
 import models.notificacao as modelo_notificacao
-from utils.escolar_client import destinatarios_da_turma
+from utils.escolar_client import destinatarios_da_turma, destinatarios_do_aluno
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ ROUTING_KEYS = (
     "comunicado.criado",
     "falta.justificacao.submetida",
     "falta.justificacao.decidida",
+    "falta.registada",
 )
 
 
@@ -105,7 +106,30 @@ def tratar_justificacao_decidida(dados):
     )
 
 
+def tratar_falta_registada(dados):
+    """Avisa os encarregados do aluno de que foi registada uma falta, que
+    ainda pode ser justificada."""
+    aluno_id = dados.get("aluno_id")
+    data = dados.get("data")
+    resolucao, falha = destinatarios_do_aluno(aluno_id)
+    if falha is not None:
+        logger.warning(
+            "falta.registada: não foi possível resolver destinatários (%s).", falha
+        )
+        return
+    nome = resolucao.get("aluno_nome") or "O seu educando"
+    for utilizador_id in resolucao.get("encarregados_utilizador_ids", []):
+        modelo_notificacao.criar(
+            utilizador_id,
+            "falta_registada",
+            "Falta registada",
+            f"{nome} teve falta em {data}. Pode submeter uma justificação.",
+            {"aluno_id": aluno_id, "turma_id": dados.get("turma_id"), "data": data},
+        )
+
+
 _TRATADORES = {
+    "falta.registada": tratar_falta_registada,
     "aluno.eliminado": tratar_aluno_eliminado,
     "comunicado.criado": tratar_comunicado_criado,
     "falta.justificacao.submetida": tratar_justificacao_submetida,

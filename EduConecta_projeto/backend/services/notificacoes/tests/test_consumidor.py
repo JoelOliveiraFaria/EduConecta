@@ -151,3 +151,40 @@ def test_processar_mensagem_tratador_que_falha_faz_ack_mesmo_assim(monkeypatch):
     consumidor.processar_mensagem(canal, _MetodoFalso("aluno.eliminado"), None, corpo)
 
     assert canal.acks == [1]
+
+
+def test_tratar_falta_registada_notifica_encarregados_do_aluno(monkeypatch):
+    import models.notificacao as modelo_notificacao
+
+    monkeypatch.setattr(
+        consumidor,
+        "destinatarios_do_aluno",
+        lambda aluno_id: ({"aluno_nome": "Ana", "encarregados_utilizador_ids": ["e1", "e2"]}, None),
+    )
+    criados = []
+    monkeypatch.setattr(
+        modelo_notificacao, "criar",
+        lambda destinatario, tipo, titulo, mensagem, referencia: criados.append((destinatario, tipo, mensagem)),
+    )
+
+    consumidor.tratar_falta_registada({"aluno_id": "a1", "turma_id": "t1", "data": "2026-03-05"})
+
+    assert [c[:2] for c in criados] == [("e1", "falta_registada"), ("e2", "falta_registada")]
+    assert "Ana" in criados[0][2] and "2026-03-05" in criados[0][2]
+
+
+def test_tratar_falta_registada_sem_destinatarios_nao_falha(monkeypatch):
+    import models.notificacao as modelo_notificacao
+
+    monkeypatch.setattr(consumidor, "destinatarios_do_aluno", lambda aluno_id: (None, "dependency_unavailable"))
+    chamado = []
+    monkeypatch.setattr(modelo_notificacao, "criar", lambda *a, **k: chamado.append(True))
+
+    consumidor.tratar_falta_registada({"aluno_id": "a1", "turma_id": "t1", "data": "2026-03-05"})
+
+    assert chamado == []
+
+
+def test_falta_registada_esta_registada_no_consumidor():
+    assert "falta.registada" in consumidor.ROUTING_KEYS
+    assert "falta.registada" in consumidor._TRATADORES

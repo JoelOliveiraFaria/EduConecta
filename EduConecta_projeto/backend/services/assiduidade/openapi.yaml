@@ -263,6 +263,14 @@ paths:
         que viste na última consulta (0 se o aluno ainda não tinha registo
         nesse dia); se entretanto alguém já tiver alterado a marcação, a
         API devolve 409 em vez de sobrepor a alteração.
+
+
+        Quando o estado gravado é `falta`, publica o evento
+        `falta.registada` (`aluno_id`, `turma_id`, `data`) no RabbitMQ, e o
+        serviço de Notificações avisa os encarregados do aluno. A publicação
+        não falha o pedido: se o RabbitMQ estiver indisponível, a marcação
+        fica gravada e o aviso perde-se. Voltar a gravar `falta` sobre uma
+        falta já marcada repete o aviso.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: turma_id

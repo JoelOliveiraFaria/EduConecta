@@ -142,3 +142,50 @@ def test_consultar_educando_sucesso(client, conta_encarregado, monkeypatch):
     assert resposta.status_code == 200
     corpo = resposta.get_json()
     assert corpo["quantidade"] == 2
+
+
+def _marcar_com_estado(client, monkeypatch, estado, publicados):
+    import datetime
+
+    resposta_escolar = {
+        "alunos": [{"id": ALUNO_ID, "nome": "Ana", "turma_id": TURMA_ID}],
+        "turma": {"id": TURMA_ID},
+        "quantidade": 1,
+        "limite": 50,
+    }
+    monkeypatch.setattr("models.assiduidade.consultar", lambda url: (resposta_escolar, None))
+    doc = {
+        "estado": estado,
+        "versao": 1,
+        "atualizado_em": datetime.datetime.now(datetime.timezone.utc),
+        "turma_id": TURMA_ID,
+        "atualizado_por": "quem-marcou",
+    }
+    monkeypatch.setattr("models.assiduidade.marcar_estado", lambda *a: doc)
+    monkeypatch.setattr(
+        "controllers.assiduidade_controller.publicar",
+        lambda chave, payload: publicados.append((chave, payload)),
+    )
+    return client.put(
+        f"/turmas/{TURMA_ID}/alunos/{ALUNO_ID}/assiduidade/2026-01-01",
+        json={"estado": estado, "versao": 0},
+        headers=AUTH_HEADER,
+    )
+
+
+def test_marcar_falta_publica_evento(client, conta_docente, monkeypatch):
+    publicados = []
+    resposta = _marcar_com_estado(client, monkeypatch, "falta", publicados)
+
+    assert resposta.status_code == 200
+    assert publicados == [
+        ("falta.registada", {"aluno_id": ALUNO_ID, "turma_id": TURMA_ID, "data": "2026-01-01"})
+    ]
+
+
+def test_marcar_presente_nao_publica_evento(client, conta_docente, monkeypatch):
+    publicados = []
+    resposta = _marcar_com_estado(client, monkeypatch, "presente", publicados)
+
+    assert resposta.status_code == 200
+    assert publicados == []

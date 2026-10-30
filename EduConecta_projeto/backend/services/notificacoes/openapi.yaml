@@ -42,7 +42,7 @@ components:
         id: { type: string }
         tipo:
           type: string
-          enum: [comunicado, justificacao_pendente, justificacao_decidida]
+          enum: [comunicado, justificacao_pendente, justificacao_decidida, falta_registada]
         titulo: { type: string }
         mensagem: { type: string }
         referencia:

@@ -13,6 +13,7 @@ from flask import Blueprint, g, jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import models.assiduidade as modelo
+from utils.eventos import publicar
 from utils.http_client import consultar, erro
 
 bp = Blueprint("assiduidade", __name__)
@@ -93,6 +94,8 @@ def marcar(turma_id, aluno_id, dia):
         return erro("database_unavailable", "Gravação não confirmada. Consulta antes de repetir.", 503)
     if doc is None:
         return erro("attendance_conflict", "A marcação mudou. Atualiza a consulta.", 409)
+    if doc["estado"] == "falta":
+        publicar("falta.registada", {"aluno_id": aid, "turma_id": tid, "data": dia})
     return jsonify(modelo.serializar(doc, aid, dia, profissional=True)), 200
 
 

@@ -20,8 +20,18 @@ def destinatarios_da_turma(turma_id):
     """Devolve (dados, None) com profissionais_utilizador_ids e
     encarregados_utilizador_ids, ou (None, motivo) se não for possível
     consultar — quem chama decide se ignora o evento."""
+    return _consultar_interno(f"turmas/{turma_id}")
+
+
+def destinatarios_do_aluno(aluno_id):
+    """Devolve (dados, None) com aluno_nome e encarregados_utilizador_ids
+    do aluno, ou (None, motivo) se não for possível consultar."""
+    return _consultar_interno(f"alunos/{aluno_id}")
+
+
+def _consultar_interno(caminho):
     pedido = Request(
-        f"http://escolar:8000/internal/turmas/{turma_id}/destinatarios",
+        f"http://escolar:8000/internal/{caminho}/destinatarios",
         headers={
             "X-Internal-Key": os.environ.get("INTERNAL_SERVICE_KEY", ""),
             "Accept": "application/json",
@@ -35,13 +45,13 @@ def destinatarios_da_turma(turma_id):
         return dados, None
     except HTTPError as exc:
         logger.warning(
-            "escolar devolveu %s a resolver destinatários da turma %s.", exc.code, turma_id
+            "escolar devolveu %s a resolver destinatários de %s.", exc.code, caminho
         )
         exc.close()
         return None, "resource_not_accessible"
     except (URLError, OSError, TimeoutError, ValueError):
         logger.warning(
-            "Não foi possível contactar o escolar para resolver destinatários da turma %s.",
-            turma_id,
+            "Não foi possível contactar o escolar para resolver destinatários de %s.",
+            caminho,
         )
         return None, "dependency_unavailable"

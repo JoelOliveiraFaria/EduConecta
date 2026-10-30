@@ -74,3 +74,41 @@ def destinatarios_turma(turma_id):
         "profissionais_utilizador_ids": profissionais_utilizador_ids,
         "encarregados_utilizador_ids": encarregados_utilizador_ids,
     }), 200
+
+
+@bp.get("/internal/alunos/<aluno_id>/destinatarios")
+def destinatarios_aluno(aluno_id):
+    """Devolve o nome do aluno e os utilizador_id dos seus encarregados de
+    educação — para eventos que dizem respeito a um só aluno (ex: falta
+    registada), em que avisar os encarregados da turma inteira seria errado."""
+    if not _chave_valida():
+        return jsonify({
+            "error": "forbidden",
+            "message": "Chave interna inválida ou em falta.",
+        }), 403
+
+    if not ObjectId.is_valid(aluno_id):
+        return jsonify({
+            "error": "invalid_student_id",
+            "message": "O identificador do aluno é inválido.",
+        }), 400
+
+    aluno = modelo_aluno.obter_com_encarregados(aluno_id)
+
+    if aluno is None:
+        return jsonify({
+            "error": "student_not_found",
+            "message": "Aluno não encontrado.",
+        }), 404
+
+    encarregados_utilizador_ids = [
+        str(e["utilizador_id"])
+        for e in modelo_encarregado.listar_por_ids(aluno.get("encarregados_ids", []))
+        if e.get("utilizador_id") is not None
+    ]
+
+    return jsonify({
+        "aluno_id": aluno_id,
+        "aluno_nome": aluno.get("nome"),
+        "encarregados_utilizador_ids": encarregados_utilizador_ids,
+    }), 200
