@@ -2,6 +2,17 @@
 
 Documento para aprovação antes de começar a implementar (mesmo formato das Fases 1 e 2).
 
+> **Estado: implementado (fases A a D), em Python.** A equipa decidiu não usar YARP/.NET (pergunta 1 da secção 9): o gateway é uma aplicação Quart com httpx, como os restantes serviços. Foram mantidas as outras opções recomendadas: prefixo `/api`, 5 tentativas de login por minuto e `/me` mantido nos serviços. O código está em `backend/gateway` e os testes em `backend/gateway/tests` (`pytest`). Diferenças em relação ao plano:
+>
+> - **Tecnologia:** Quart, httpx e PyJWT em vez de YARP. As secções 2 a 8 descrevem o comportamento e continuam válidas; só o "como" mudou. Em vez de `appsettings.json`, a tabela de rotas está em `rotas.py`.
+> - O limite do resto da API ficou em 300 pedidos por minuto por utilizador (`RATE_LIMIT_API_PER_MINUTE`). Os contadores vivem em memória, por isso o gateway corre com **um só worker**; com vários, o limite efetivo seria multiplicado.
+> - Os serviços não esperam pelo `service_healthy` uns dos outros para o gateway arrancar (`depends_on` simples). O gateway verifica a saúde de cada um em `/health` de 10 em 10 segundos e, após 3 falhas seguidas, responde 503 sem esperar pelo timeout.
+> - O gateway **lê o corpo do pedido para memória** antes de o reencaminhar, para o poder recusar com 413 antes de tocar no serviço. Com o teto de 26 MB dos comunicados, isto é aceitável neste volume; as respostas (anexos) seguem em streaming.
+> - Os caminhos com `..`, `.`, barras repetidas ou barras e pontos codificados (`%2e`, `%2f`, `%5c`) são recusados com 404. Sem isto, `/api/alunos/../internal/...` podia contornar a tabela de rotas.
+> - A página Swagger é servida pelo próprio gateway (`/api/docs/{servico}`), porque as páginas dos serviços pedem `/openapi.yaml` na raiz e deixariam de funcionar atrás do prefixo `/api`.
+> - Há um `GET /api/ready` que pergunta o `/ready` a cada serviço (inclui a base de dados) e que os scripts de `testes_manuais/` usam no lugar do `/ready` de cada serviço.
+> - Os scripts de `testes_manuais/` que correm dentro dos contentores (`http://auth:8000`, etc.) não foram alterados: falam com os serviços pela rede interna, sem gateway.
+
 ---
 
 ## 1. Ponto de partida
@@ -17,15 +28,15 @@ Hoje **não existe gateway**. A arquitetura descrita no README (YARP à frente d
 - **Não há frontend no repositório.** Os únicos clientes são os scripts de `testes_manuais/`, que apontam diretamente para `127.0.0.1:5001–5004`.
 
 ### Tensão com o README
-O README fixa **YARP (.NET)**, mas todos os serviços são **Python** (Flask e Quart). O gateway seria o único componente .NET. O SDK .NET 8.0.302 já está instalado nesta máquina.
+O README fixa **YARP (.NET)**, mas todos os serviços são **Python** (Flask e Quart). Um gateway em YARP seria o único componente .NET; a equipa preferiu manter tudo em Python (ver o estado no topo).
 
 ---
 
-## 2. Decisão proposta: YARP
+## 2. Decisão: gateway em Python
 
-Implementar o gateway com **YARP** num projeto ASP.NET Core mínimo (`backend/gateway/`), porque é o que a arquitetura entregue (README e diagrama) especifica. A configuração é quase toda declarativa (`appsettings.json`), com poucas dezenas de linhas de código.
+O plano propunha YARP, que é o que o README e o diagrama especificam, e deixava a escolha à equipa. A equipa escolheu **Python**: uma aplicação **Quart** com **httpx** para reencaminhar e **PyJWT** para validar o token, com a mesma estrutura dos serviços (`app.py`, `controllers/`, `utils/`) e a mesma imagem base.
 
-Se a equipa preferir não introduzir .NET, o equivalente é Traefik ou Nginx. O plano abaixo mantém-se, mas a secção 5 (validação de JWT) passaria a ser configuração em vez de código.
+O que se ganha: uma só linguagem e um só runtime no projeto, e o gateway usa as mesmas regras de token do auth. O que se paga: o proxy é código nosso (cabeçalhos entre ligações, timeouts, erros, limites), que o YARP já traz feito, e por isso está coberto por testes próprios.
 
 ---
 
@@ -51,7 +62,7 @@ Se a equipa preferir não introduzir .NET, o equivalente é Traefik ou Nginx. O 
 
 O gateway expõe tudo sob `/api` e remove o prefixo antes de encaminhar (`PathRemovePrefix`), por isso os serviços ficam como estão. Os URLs não incluem o nome do serviço, para o cliente não depender da decomposição.
 
-O ponto delicado é que **várias rotas partilham prefixos entre serviços**. Por exemplo, `/turmas/{id}` é do escolar, mas `/turmas/{id}/assiduidade` é do assiduidade. O ASP.NET dá prioridade a segmentos literais sobre parâmetros e a parâmetros sobre `catch-all`, o que resolve isto sem ordenar à mão. Ainda assim, a tabela tem de ter um teste (secção 7).
+O ponto delicado é que **várias rotas partilham prefixos entre serviços**. Por exemplo, `/turmas/{id}` é do escolar, mas `/turmas/{id}/assiduidade` é do assiduidade. O gateway escolhe a rota mais específica: em cada segmento, um literal vence um parâmetro e um parâmetro vence um `catch-all` (ver `corresponder` em `rotas.py`), o que resolve isto sem ordenar à mão. Ainda assim, a tabela tem de ter um teste (secção 7).
 
 | Serviço | Rotas (todas com prefixo `/api`) |
 |---|---|
@@ -113,7 +124,7 @@ Evitar as chamadas ao `/me` nos serviços (o gateway injetaria `X-User-Id` e `X-
 ## 7. Fases
 
 ### Fase A — Esqueleto e roteamento
-- Projeto `backend/gateway/` (YARP), `Dockerfile` e serviço `gateway` no `compose.yaml`, com `depends_on` dos serviços em `service_healthy`.
+- Projeto `backend/gateway/` (Quart), `Dockerfile` e serviço `gateway` no `compose.yaml`, com `depends_on` dos serviços em `service_healthy`.
 - Tabela de rotas da secção 4, ainda **sem autenticação**.
 - **Teste da tabela de rotas:** uma lista de pares (método, caminho) e o serviço esperado, incluindo as colisões. É a rede de segurança mais importante do plano.
 - Os serviços deixam de publicar portas. Para desenvolvimento fica um `compose.debug.yaml` que as volta a abrir, porque os scripts de `testes_manuais/` e os testes de integração usam `127.0.0.1:500x`.
@@ -150,7 +161,7 @@ O gateway é o único serviço exposto (NodePort ou Ingress). Os restantes passa
 
 ## 9. Decisões para a equipa
 
-1. **YARP (.NET)** ou Traefik/Nginx? (secção 2)
+1. ~~YARP (.NET) ou Traefik/Nginx?~~ Decidido: Python (secção 2).
 2. **Prefixo `/api`** sem nome de serviço nos URLs, como proposto? (secção 4)
 3. **Limites de tentativas:** 5 por minuto no login e quanto no resto? (secção 6)
 4. **Manter o `/me` nos serviços** na primeira versão, como recomendado? (secção 5)

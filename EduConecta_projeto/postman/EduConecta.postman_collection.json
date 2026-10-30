@@ -1,0 +1,3040 @@
+{
+  "info": {
+    "name": "EduConecta API",
+    "description": "Pedidos de todas as rotas da API, através do **API Gateway** (`{{baseUrl}}`, por omissão `http://localhost:8080/api`).\n\n**Como usar**\n1. Importe esta coleção e o ambiente `EduConecta - Local`, e escolha o ambiente.\n2. No ambiente, preencha `email` e `password` de uma conta existente.\n3. Arranque o sistema (`docker compose up -d --build`) e corra **Gateway > Estado dos serviços**. Tem de dar `ready`.\n4. Corra **Auth > Autenticação > Login**. O token fica guardado e é usado por todos os outros pedidos (dura 15 minutos: se aparecer `token_expired`, volte a fazer login).\n5. Os pedidos de criação guardam o ID devolvido (`alunoId`, `turmaId`, ...), por isso os pedidos seguintes já os usam. Pode alterar todas as variáveis em *Variables* da coleção.\n\nCada perfil só consegue chamar as rotas que lhe cabem (por exemplo, criar alunos exige uma conta de administrador). Um 403 do serviço significa que a conta não tem esse perfil.\n\nGerada a partir dos `openapi.yaml` dos serviços.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "minhaContaId",
+      "value": ""
+    },
+    {
+      "key": "contaId",
+      "value": ""
+    },
+    {
+      "key": "alunoId",
+      "value": ""
+    },
+    {
+      "key": "turmaId",
+      "value": ""
+    },
+    {
+      "key": "encarregadoId",
+      "value": ""
+    },
+    {
+      "key": "profissionalId",
+      "value": ""
+    },
+    {
+      "key": "profissionalUtilizadorId",
+      "value": ""
+    },
+    {
+      "key": "encarregadoUtilizadorId",
+      "value": ""
+    },
+    {
+      "key": "comunicadoId",
+      "value": ""
+    },
+    {
+      "key": "fotografiaId",
+      "value": ""
+    },
+    {
+      "key": "conversaId",
+      "value": ""
+    },
+    {
+      "key": "mensagemId",
+      "value": ""
+    },
+    {
+      "key": "notificacaoId",
+      "value": ""
+    },
+    {
+      "key": "dia",
+      "value": "2026-03-05"
+    },
+    {
+      "key": "inicio",
+      "value": "2026-03-01"
+    },
+    {
+      "key": "fim",
+      "value": "2026-03-31"
+    }
+  ],
+  "item": [
+    {
+      "name": "Gateway",
+      "description": "Verificações que não precisam de login. Úteis para confirmar que o gateway e a rede estão bem antes de testar o resto.",
+      "item": [
+        {
+          "name": "Estado do gateway",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Gateway vivo\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Devolve X-Request-Id\", function () { pm.expect(pm.response.headers.has(\"X-Request-Id\")).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado dos serviços",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Pergunta o /ready a cada serviço. Se der 503 (not_ready), vê-se qual falhou. Quase sempre é a ligação ao Atlas (IP não autorizado ou rede que bloqueia a porta 27017).",
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ready"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Todos os serviços prontos\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().status).to.eql(\"ready\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sem token devolve 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "",
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 sem token\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Erro authentication_required\", function () { pm.expect(pm.response.json().error).to.eql(\"authentication_required\"); });",
+                  "pm.test(\"Cabeçalho WWW-Authenticate\", function () { pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token inválido devolve 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer abc.def.ghi"
+              }
+            ],
+            "description": "",
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 com token inventado\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Erro invalid_token\", function () { pm.expect(pm.response.json().error).to.eql(\"invalid_token\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rota interna não é exposta (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Não precisa de login: o gateway responde 404 antes de verificar o token, porque a rota não existe na tabela.",
+            "url": {
+              "raw": "{{baseUrl}}/internal/turmas/{{turmaId}}/destinatarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "turmas",
+                "{{turmaId}}",
+                "destinatarios"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway não expõe /internal\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registo público não é exposto (404)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "",
+            "url": {
+              "raw": "{{baseUrl}}/registo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registo"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway não expõe /registo\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Documentação do Auth (OpenAPI)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/auth.yaml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi",
+                "auth.yaml"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Especificação disponível sem token\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Autenticação",
+          "item": [
+            {
+              "name": "Autentica por email + password",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "login"
+                  ]
+                },
+                "description": "Devolve sempre a mesma mensagem genérica de erro tanto para email inexistente como para password errada — não revela qual dos dois falhou (compara sempre contra um hash, mesmo quando o email não existe, para não dar pistas pelo tempo de resposta).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Login com sucesso\", function () { pm.response.to.have.status(200); });",
+                      "const corpo = pm.response.json();",
+                      "pm.test(\"Devolve um access_token\", function () { pm.expect(corpo.access_token).to.be.a(\"string\"); });",
+                      "pm.collectionVariables.set(\"token\", corpo.access_token);",
+                      "if (corpo.utilizador) { pm.collectionVariables.set(\"minhaContaId\", corpo.utilizador.id); }",
+                      "if (corpo.deve_alterar_password) { console.warn(\"A conta tem de alterar a palavra-passe: use Auth > Alterar palavra-passe.\"); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dados da conta associada ao token atual",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "description": "Fonte de verdade sobre \"quem é este utilizador\" — chamada pelos outros 4 serviços para validar sessões e obter o perfil."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Troca a password da conta autenticada",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/password/alterar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "password",
+                    "alterar"
+                  ]
+                },
+                "description": "Confirma a password atual antes de aceitar a nova. É esta rota que desliga `deve_alterar_password`, obrigatória para quem recebeu uma conta criada por um admin.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"password_atual\": \"\",\n  \"password_nova\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Administração",
+          "item": [
+            {
+              "name": "Cria uma conta (só admin)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores"
+                  ]
+                },
+                "description": "Único caminho para criar contas. Gera uma password temporária, envia-a por email, e só marca a conta como 'ativo' depois do email ser aceite pelo SMTP — caso contrário fica em 'provisionamento' bloqueada para revisão manual.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Maria Teste\",\n  \"email\": \"maria.teste@example.com\",\n  \"perfil\": \"encarregado\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"contaId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consulta uma conta por id (só admin)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores/:conta_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores",
+                    ":conta_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conta_id",
+                      "value": "{{contaId}}"
+                    }
+                  ]
+                },
+                "description": "Usado pelo serviço escolar para confirmar perfil/estado de uma conta sem aceder diretamente à base de dados do auth."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Edita nome, email e/ou perfil de uma conta (RF04, só admin)",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores/:conta_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores",
+                    ":conta_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conta_id",
+                      "value": "{{contaId}}"
+                    }
+                  ]
+                },
+                "description": "Pelo menos um campo tem de ser enviado. Se o email mudar, não pode colidir com o de outra conta. Uma conta com estado 'eliminado' responde 404 (trata-se como inexistente, não se revela que existiu).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Maria Teste Atualizada\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Elimina uma conta (RF06, só admin — soft delete)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores/:conta_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores",
+                    ":conta_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conta_id",
+                      "value": "{{contaId}}"
+                    }
+                  ]
+                },
+                "description": "O documento NUNCA é removido da base de dados — só o `estado` muda para 'eliminado', bloqueando a conta em todo o sistema (login, /me e tudo o resto exigem estado \"ativo\"). Guarda `eliminado_em` e `eliminado_por` para auditoria. Um admin não pode eliminar a sua própria conta. Uma conta já eliminada responde 404, tal como uma que nunca existiu."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Desativa temporariamente uma conta (RF05, só admin)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores/:conta_id/desativar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores",
+                    ":conta_id",
+                    "desativar"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conta_id",
+                      "value": "{{contaId}}"
+                    }
+                  ]
+                },
+                "description": "Define estado 'inativo' — reversível via /reativar. Só é possível a partir de estado 'ativo'. Um admin não pode desativar a sua própria conta."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reverte uma desativação (RF05, só admin)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/utilizadores/:conta_id/reativar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "utilizadores",
+                    ":conta_id",
+                    "reativar"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conta_id",
+                      "value": "{{contaId}}"
+                    }
+                  ]
+                },
+                "description": "Define estado 'ativo'. Só é possível a partir de 'inativo' — uma conta 'eliminada' (soft delete) não pode ser reativada por aqui."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Gestão escolar",
+      "item": [
+        {
+          "name": "Alunos",
+          "item": [
+            {
+              "name": "Listar alunos",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos"
+                  ]
+                },
+                "description": "Lista até 50 alunos. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Criar aluno",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos"
+                  ]
+                },
+                "description": "Cria um aluno. **Perfil: admin apenas.** numero_processo é único.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Ana Teste\",\n  \"numero_processo\": \"2026-001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id || (d.aluno && d.aluno.id);",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"alunoId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consultar aluno",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Devolve um aluno pelo id. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Atualizar aluno",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Atualização parcial de nome e/ou numero_processo. **Perfil: admin, ou um profissional (docente/educadora/auxiliar) atribuído à turma atual do aluno** — um profissional de outra turma recebe 403.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Ana Teste Atualizada\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Eliminar aluno",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Soft delete (RF10) — o aluno fica marcado como eliminado e deixa de aparecer em qualquer consulta, mas o documento não é removido da base de dados. **Perfil: admin apenas.** Registos de outros serviços (diário, assiduidade) que referenciam este aluno não são afetados."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Atribuir turma ao aluno",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/turma",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "turma"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Define (ou substitui) a turma de um aluno. **Perfil: admin apenas.**",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"turma_id\": \"{{turmaId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Associar encarregado a aluno",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/encarregados/:encarregado_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "encarregados",
+                    ":encarregado_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "encarregado_id",
+                      "value": "{{encarregadoId}}"
+                    }
+                  ]
+                },
+                "description": "Liga um encarregado de educação a um aluno (um aluno pode ter vários). **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar encarregados de um aluno",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/encarregados",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "encarregados"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Lista os encarregados de educação associados a um aluno. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar os meus educandos",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "alunos"
+                  ]
+                },
+                "description": "Lista os educandos do encarregado autenticado. **Perfil: encarregado** (rota pessoal — listada em PERMISSOES_PESSOAIS, não precisa de admin). Devolve 403 (school_profile_not_linked) se a conta ainda não tiver um registo de encarregado associado."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Turmas",
+          "item": [
+            {
+              "name": "Criar turma",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas"
+                  ]
+                },
+                "description": "Cria uma turma. **Perfil: admin apenas.** ano_letivo tem de ter o formato \"AAAA/AAAA\" com dois anos consecutivos (ex: \"2025/2026\"). tipo é obrigatório: \"creche\" (aceita diário e faltas) ou \"basico\" (só aceita faltas — o serviço diario recusa turmas deste tipo).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Sala Azul\",\n  \"ano_letivo\": \"2025/2026\",\n  \"tipo\": \"creche\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id || (d.turma && d.turma.id);",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"turmaId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar turmas",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas"
+                  ]
+                },
+                "description": "Lista até 50 turmas. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consultar detalhe de uma turma",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Devolve a turma e os profissionais atribuídos. Não há distinção entre eles (ex: \"diretor de turma\") — qualquer um pode fazer tudo o que a turma permite ao seu perfil, incluindo decidir justificações de faltas no serviço assiduidade. **Perfil: admin (qualquer turma), ou um profissional atribuído a essa turma** — para as restantes, devolve 404 em vez de 403, para não revelar que a turma existe a quem não tem acesso."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar alunos de uma turma (admin)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "alunos"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Lista os alunos de qualquer turma. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Associar profissional a turma",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/profissionais/:profissional_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "profissionais",
+                    ":profissional_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "profissional_id",
+                      "value": "{{profissionalId}}"
+                    }
+                  ]
+                },
+                "description": "Atribui um profissional a uma turma. **Perfil: admin apenas.** Antes de gravar, confirma junto do serviço auth que a conta ligada ao profissional está ativa e que o perfil da conta ainda corresponde ao perfil guardado no registo profissional. Uma turma só pode ter um docente (perfil \"docente\") atribuído de cada vez — não há limite para educadora/auxiliar."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar as minhas turmas",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/turmas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "turmas"
+                  ]
+                },
+                "description": "Lista as turmas atribuídas ao profissional autenticado. **Perfil: docente, educadora, auxiliar** (rota pessoal). Devolve 403 (professional_profile_not_linked ou professional_profile_mismatch) se a conta não tiver um registo profissional correspondente."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar alunos de uma das minhas turmas",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/turmas/:turma_id/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "turmas",
+                    ":turma_id",
+                    "alunos"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Lista os alunos de uma turma do profissional autenticado. **Perfil: docente, educadora, auxiliar.** Devolve 404 (não 403) se a turma existir mas não pertencer ao profissional — de propósito, para não revelar a outros utilizadores quais turmas existem."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Encarregados",
+          "item": [
+            {
+              "name": "Criar encarregado de educação (+ conta de login)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/encarregados",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "encarregados"
+                  ]
+                },
+                "description": "Cria o registo de encarregado de educação E a sua conta de login (perfil \"encarregado\") num único pedido: o serviço auth gera a conta e envia uma password temporária para o email indicado, tal como já acontece para docentes/educadoras/auxiliares em POST /admin/utilizadores (serviço auth). **Perfil: admin apenas.** PUT /encarregados/{id}/utilizador continua a existir, mas só serve para ligar uma conta já existente — não é preciso para o fluxo normal.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Maria Teste\",\n  \"email\": \"maria.teste@example.com\",\n  \"cc\": \"12345678\",\n  \"telemovel\": \"910000000\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id || (d.encarregado && d.encarregado.id);",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"encarregadoId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar encarregados de educação",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/encarregados",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "encarregados"
+                  ]
+                },
+                "description": "Lista até 50 encarregados de educação. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar educandos de um encarregado (admin)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/encarregados/:encarregado_id/alunos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "encarregados",
+                    ":encarregado_id",
+                    "alunos"
+                  ],
+                  "variable": [
+                    {
+                      "key": "encarregado_id",
+                      "value": "{{encarregadoId}}"
+                    }
+                  ]
+                },
+                "description": "Lista os educandos de um encarregado por id. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Associar conta de utilizador a um encarregado",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/encarregados/:encarregado_id/utilizador",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "encarregados",
+                    ":encarregado_id",
+                    "utilizador"
+                  ],
+                  "variable": [
+                    {
+                      "key": "encarregado_id",
+                      "value": "{{encarregadoId}}"
+                    }
+                  ]
+                },
+                "description": "Liga uma conta de utilizador (perfil \"encarregado\", já criada no auth) a este registo de encarregado. **Perfil: admin apenas** (dupla verificação: pelo before_request do blueprint e, redundantemente, dentro da própria rota — comportamento preservado tal como estava no código original antes do refactor para MVC).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"utilizador_id\": \"{{contaId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Profissionais",
+          "item": [
+            {
+              "name": "Criar profissional (+ conta de login)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/profissionais",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "profissionais"
+                  ]
+                },
+                "description": "Cria o registo de profissional (docente, educadora ou auxiliar) E a sua conta de login, num único pedido: o auth cria a conta com o perfil indicado e envia uma password temporária para o email — mesmo fluxo de POST /encarregados. **Perfil: admin apenas.**",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nome\": \"Joana Docente\",\n  \"email\": \"joana.docente@example.com\",\n  \"cc\": \"87654321\",\n  \"telemovel\": \"920000000\",\n  \"perfil\": \"docente\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id || (d.profissional && d.profissional.id);",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"profissionalId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar profissionais",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/profissionais",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "profissionais"
+                  ]
+                },
+                "description": "Lista até 50 profissionais. **Perfil: admin apenas.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Validação de conversas",
+          "item": [
+            {
+              "name": "Validar participantes de uma conversa",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/chat/validar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "chat",
+                    "validar"
+                  ]
+                },
+                "description": "Confirma que a conta autenticada pode participar numa conversa sobre um aluno concreto, validando a cadeia inteira profissional↔turma↔aluno↔encarregado (não só os IDs recebidos). Usado pelo serviço comunicados antes de abrir/usar uma conversa — esta rota não guarda nenhuma conversa, só valida a legitimidade da relação. **Perfil: docente, educadora, encarregado** (rota pessoal — a conta autenticada tem de ser um dos dois participantes indicados no pedido).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"aluno_id\": \"{{alunoId}}\",\n  \"profissional_utilizador_id\": \"{{profissionalUtilizadorId}}\",\n  \"encarregado_utilizador_id\": \"{{encarregadoUtilizadorId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Assiduidade",
+      "item": [
+        {
+          "name": "Faltas",
+          "item": [
+            {
+              "name": "Listar a assiduidade de uma turma num dia",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/assiduidade?data={{dia}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "assiduidade"
+                  ],
+                  "query": [
+                    {
+                      "key": "data",
+                      "value": "{{dia}}"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Só para docente/educadora associados à turma — a verificação de posse da turma é feita pelo serviço `escolar` (GET /me/turmas/{id}/alunos), não localmente."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Marcar o estado de assiduidade de um aluno num dia",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/alunos/:aluno_id/assiduidade/:dia",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "alunos",
+                    ":aluno_id",
+                    "assiduidade",
+                    ":dia"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "Usa controlo de concorrência otimista por `versao`: envia a versão que viste na última consulta (0 se o aluno ainda não tinha registo nesse dia); se entretanto alguém já tiver alterado a marcação, a API devolve 409 em vez de sobrepor a alteração.\n\nQuando o estado gravado é `falta`, publica o evento `falta.registada` (`aluno_id`, `turma_id`, `data`) no RabbitMQ, e o serviço de Notificações avisa os encarregados do aluno. A publicação não falha o pedido: se o RabbitMQ estiver indisponível, a marcação fica gravada e o aviso perde-se. Voltar a gravar `falta` sobre uma falta já marcada repete o aviso.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"estado\": \"falta\",\n  \"versao\": 0\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Histórico de assiduidade de um educando",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/assiduidade?inicio={{inicio}}&fim={{fim}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "assiduidade"
+                  ],
+                  "query": [
+                    {
+                      "key": "inicio",
+                      "value": "{{inicio}}"
+                    },
+                    {
+                      "key": "fim",
+                      "value": "{{fim}}"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    }
+                  ]
+                },
+                "description": "Só para o encarregado de educação do aluno. Intervalo `inicio`–`fim` limitado a 31 dias inclusive, para limitar o tamanho da resposta."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Justificações",
+          "item": [
+            {
+              "name": "Submeter justificação de uma falta",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/faltas/:dia/justificacao",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "faltas",
+                    ":dia",
+                    "justificacao"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "RF20. **Perfil: encarregado de educação do aluno.** Envia pelo menos um de `motivo` (texto) ou `anexo` (ficheiro, até 5MB) — pode enviar os dois. Só é aceite se existir mesmo uma falta nesse dia e o prazo de 3 dias úteis ainda não tiver passado; só pode ser submetida uma vez por falta.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "motivo",
+                      "type": "text",
+                      "value": "Consulta médica"
+                    },
+                    {
+                      "key": "anexo",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consultar justificação de uma falta",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/faltas/:dia/justificacao",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "faltas",
+                    ":dia",
+                    "justificacao"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "RF19 (extensão). **Perfil: encarregado do aluno, ou docente/educadora atribuído à turma da falta.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Descarregar o anexo de uma justificação",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/faltas/:dia/justificacao/anexo",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "faltas",
+                    ":dia",
+                    "justificacao",
+                    "anexo"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "**Perfil: encarregado do aluno, ou docente/educadora atribuído à turma.** 404 se a justificação não tiver anexo."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Aprovar justificação de falta",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/faltas/:dia/justificacao/aprovar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "faltas",
+                    ":dia",
+                    "justificacao",
+                    "aprovar"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "RF18/RF21. **Perfil: docente ou educadora atribuído à turma a que a falta pertence** (confirmado via `escolar: GET /me/turmas/{id}/alunos`) — não há \"diretor de turma\": qualquer profissional atribuído à turma pode decidir."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Rejeitar justificação de falta",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/alunos/:aluno_id/faltas/:dia/justificacao/rejeitar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "alunos",
+                    ":aluno_id",
+                    "faltas",
+                    ":dia",
+                    "justificacao",
+                    "rejeitar"
+                  ],
+                  "variable": [
+                    {
+                      "key": "aluno_id",
+                      "value": "{{alunoId}}"
+                    },
+                    {
+                      "key": "dia",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "description": "RF18/RF22. **Perfil: docente ou educadora atribuído à turma a que a falta pertence** (mesma regra da aprovação). Exige `motivo_rejeicao`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"motivo_rejeicao\": \"Falta de comprovativo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Diário",
+      "item": [
+        {
+          "name": "Criar o registo diário de um aluno numa data",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/turmas/:turma_id/alunos/:aluno_id/diario",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "turmas",
+                ":turma_id",
+                "alunos",
+                ":aluno_id",
+                "diario"
+              ],
+              "variable": [
+                {
+                  "key": "turma_id",
+                  "value": "{{turmaId}}"
+                },
+                {
+                  "key": "aluno_id",
+                  "value": "{{alunoId}}"
+                }
+              ]
+            },
+            "description": "Só profissionais (docente/educadora/auxiliar) atribuídos a esta turma, com este aluno na turma, podem criar registos. Todos os campos de texto são obrigatórios no corpo, mas pelo menos um tem de ter conteúdo. O id do documento é `aluno_id:data` — duplicados (mesmo aluno, mesma data) são impossíveis a nível da base de dados.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"{{dia}}\",\n  \"alimentacao\": \"Comeu toda a sopa\",\n  \"sono\": \"Dormiu 1h30\",\n  \"higiene\": \"Muda às 15h\",\n  \"atividades\": \"Pintura e música\",\n  \"observacoes\": \"Sem observações\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                  "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar os registos de um aluno numa turma (visão do profissional)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/turmas/:turma_id/alunos/:aluno_id/diario",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "turmas",
+                ":turma_id",
+                "alunos",
+                ":aluno_id",
+                "diario"
+              ],
+              "variable": [
+                {
+                  "key": "turma_id",
+                  "value": "{{turmaId}}"
+                },
+                {
+                  "key": "aluno_id",
+                  "value": "{{alunoId}}"
+                }
+              ]
+            },
+            "description": "Mesma verificação de acesso que a criação — até 31 registos, mais recentes primeiro."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                  "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar o Diário de um educando (visão do encarregado de educação)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/alunos/:aluno_id/diario",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "alunos",
+                ":aluno_id",
+                "diario"
+              ],
+              "variable": [
+                {
+                  "key": "aluno_id",
+                  "value": "{{alunoId}}"
+                }
+              ]
+            },
+            "description": "Só para contas com perfil `encarregado`. A relação é confirmada em duas chamadas ao `escolar` (`/me/alunos`) — o aluno tem de aparecer na lista de educandos de quem está autenticado; a turma usada na query vem dessa resposta, nunca do cliente. O campo `criado_por` não aparece nesta resposta (não é informação relevante para o encarregado)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                  "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar um registo diário já existente",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/turmas/:turma_id/alunos/:aluno_id/diario/:data_registo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "turmas",
+                ":turma_id",
+                "alunos",
+                ":aluno_id",
+                "diario",
+                ":data_registo"
+              ],
+              "variable": [
+                {
+                  "key": "turma_id",
+                  "value": "{{turmaId}}"
+                },
+                {
+                  "key": "aluno_id",
+                  "value": "{{alunoId}}"
+                },
+                {
+                  "key": "data_registo",
+                  "value": "{{dia}}"
+                }
+              ]
+            },
+            "description": "Só quem criou o registo (`criado_por`) o pode editar, além de precisar de acesso à turma/aluno. Aceita um ou mais dos campos de texto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacoes\": \"Atualizado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                  "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Comunicados",
+      "item": [
+        {
+          "name": "Comunicados",
+          "item": [
+            {
+              "name": "Publicar um comunicado",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Só docente/educadora atribuídos à turma.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"titulo\": \"Reunião de pais\",\n  \"texto\": \"A reunião realiza-se na sexta-feira às 18h.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"comunicadoId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar comunicados de uma turma",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados"
+                  ],
+                  "query": [
+                    {
+                      "key": "pagina",
+                      "value": "1",
+                      "disabled": true
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    }
+                  ]
+                },
+                "description": "Qualquer perfil com acesso à turma (docente/educadora atribuídos, ou encarregado com educando lá)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Editar um comunicado",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados/:comunicado_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados",
+                    ":comunicado_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "comunicado_id",
+                      "value": "{{comunicadoId}}"
+                    }
+                  ]
+                },
+                "description": "Atualização parcial de titulo e/ou texto — só o autor do comunicado.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"titulo\": \"Reunião de pais (atualizado)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Eliminar um comunicado",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados/:comunicado_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados",
+                    ":comunicado_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "comunicado_id",
+                      "value": "{{comunicadoId}}"
+                    }
+                  ]
+                },
+                "description": "Só o autor do comunicado. Elimina também todas as fotografias (e vídeos, se existirem de antes desta operação ter sido removida de comunicados) anexadas, do GridFS."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Fotografias dos comunicados",
+          "item": [
+            {
+              "name": "Anexar uma fotografia a um comunicado",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados/:comunicado_id/fotografias",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados",
+                    ":comunicado_id",
+                    "fotografias"
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "comunicado_id",
+                      "value": "{{comunicadoId}}"
+                    }
+                  ]
+                },
+                "description": "Só o autor do comunicado. A imagem é reencodada para JPEG (remove EXIF, limita a 20 milhões de píxeis e 5MB depois de convertida). Aceita JPEG, PNG ou WebP de entrada, não animados.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "fotografia",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"fotografiaId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar fotografias de um comunicado",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados/:comunicado_id/fotografias",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados",
+                    ":comunicado_id",
+                    "fotografias"
+                  ],
+                  "query": [
+                    {
+                      "key": "antes_de",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "comunicado_id",
+                      "value": "{{comunicadoId}}"
+                    }
+                  ]
+                },
+                "description": "Listar fotografias de um comunicado"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Ver/descarregar uma fotografia",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/turmas/:turma_id/comunicados/:comunicado_id/fotografias/:fotografia_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "turmas",
+                    ":turma_id",
+                    "comunicados",
+                    ":comunicado_id",
+                    "fotografias",
+                    ":fotografia_id"
+                  ],
+                  "query": [
+                    {
+                      "key": "download",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "turma_id",
+                      "value": "{{turmaId}}"
+                    },
+                    {
+                      "key": "comunicado_id",
+                      "value": "{{comunicadoId}}"
+                    },
+                    {
+                      "key": "fotografia_id",
+                      "value": "{{fotografiaId}}"
+                    }
+                  ]
+                },
+                "description": "Ver/descarregar uma fotografia"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Conversas",
+          "item": [
+            {
+              "name": "Criar (ou recuperar) uma conversa",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas"
+                  ]
+                },
+                "description": "O id é o SHA-256 dos três participantes — pedir a mesma combinação duas vezes é idempotente e devolve sempre a mesma conversa (200 na segunda vez, 201 na primeira).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"aluno_id\": \"{{alunoId}}\",\n  \"profissional_utilizador_id\": \"{{profissionalUtilizadorId}}\",\n  \"encarregado_utilizador_id\": \"{{encarregadoUtilizadorId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.conversa && d.conversa.id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"conversaId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar as minhas conversas",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas"
+                  ],
+                  "query": [
+                    {
+                      "key": "depois_de",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Cada conversa é revalidada contra o escolar; as que já não são válidas são omitidas em silêncio (não abortam o pedido)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Enviar uma mensagem",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas/:conversa_id/mensagens",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas",
+                    ":conversa_id",
+                    "mensagens"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversa_id",
+                      "value": "{{conversaId}}"
+                    }
+                  ]
+                },
+                "description": "Enviar uma mensagem",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"texto\": \"Bom dia!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"mensagemId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar mensagens de uma conversa",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas/:conversa_id/mensagens",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas",
+                    ":conversa_id",
+                    "mensagens"
+                  ],
+                  "query": [
+                    {
+                      "key": "antes_de",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversa_id",
+                      "value": "{{conversaId}}"
+                    }
+                  ]
+                },
+                "description": "Mais recentes primeiro na query, devolvidas já em ordem cronológica."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Enviar uma mensagem de fotografia",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas/:conversa_id/mensagens/fotografia",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas",
+                    ":conversa_id",
+                    "mensagens",
+                    "fotografia"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversa_id",
+                      "value": "{{conversaId}}"
+                    }
+                  ]
+                },
+                "description": "Mesma conversão/validação que os anexos de comunicado usavam (Pillow: reencode JPEG, remove EXIF, limite de 20 milhões de píxeis e 5MB).",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "fotografia",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Enviar uma mensagem de vídeo",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas/:conversa_id/mensagens/video",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas",
+                    ":conversa_id",
+                    "mensagens",
+                    "video"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversa_id",
+                      "value": "{{conversaId}}"
+                    }
+                  ]
+                },
+                "description": "Faz streaming do upload para disco (corta ao ultrapassar 25MB) e valida com ffprobe: tem de ser MP4 H.264, com áudio AAC opcional, sem pistas adicionais. Mesma lógica que os comunicados usavam antes de o vídeo passar a ser um tipo de mensagem de chat.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "video",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Descarregar o anexo (fotografia/vídeo) de uma mensagem",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/conversas/:conversa_id/mensagens/:mensagem_id/anexo",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "conversas",
+                    ":conversa_id",
+                    "mensagens",
+                    ":mensagem_id",
+                    "anexo"
+                  ],
+                  "query": [
+                    {
+                      "key": "download",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversa_id",
+                      "value": "{{conversaId}}"
+                    },
+                    {
+                      "key": "mensagem_id",
+                      "value": "{{mensagemId}}"
+                    }
+                  ]
+                },
+                "description": "Descarregar o anexo (fotografia/vídeo) de uma mensagem"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notificações",
+      "item": [
+        {
+          "name": "Notificações",
+          "item": [
+            {
+              "name": "Listar as minhas notificações",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/notificacoes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "notificacoes"
+                  ],
+                  "query": [
+                    {
+                      "key": "pagina",
+                      "value": "1",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lista as notificações do utilizador autenticado, mais recentes primeiro, paginadas (20 por página). **Qualquer perfil autenticado.**"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});",
+                      "try {",
+                      "  const d = pm.response.json();",
+                      "  const id = d.notificacoes && d.notificacoes[0] && d.notificacoes[0].id;",
+                      "  if (pm.response.code < 300 && id) { pm.collectionVariables.set(\"notificacaoId\", id); }",
+                      "} catch (e) { /* resposta sem JSON */ }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Marcar uma notificação como lida",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/notificacoes/:notificacao_id/lida",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "notificacoes",
+                    ":notificacao_id",
+                    "lida"
+                  ],
+                  "variable": [
+                    {
+                      "key": "notificacao_id",
+                      "value": "{{notificacaoId}}"
+                    }
+                  ]
+                },
+                "description": "Só o destinatário da notificação a pode marcar como lida."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"O gateway encaminhou o pedido (sem 502, 503 ou 504)\", function () {",
+                      "  pm.expect([502, 503, 504]).to.not.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

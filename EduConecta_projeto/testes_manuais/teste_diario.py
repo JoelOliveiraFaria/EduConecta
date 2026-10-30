@@ -9,9 +9,9 @@ from urllib.request import Request, urlopen
 
 warnings.simplefilter("error", GetPassWarning)
 
-AUTH = "http://127.0.0.1:5002"
-SCHOOL = "http://127.0.0.1:5001"
-DIARIO = "http://127.0.0.1:5003"
+AUTH = "http://127.0.0.1:8080/api"
+SCHOOL = "http://127.0.0.1:8080/api"
+DIARIO = "http://127.0.0.1:8080/api"
 
 TURMA = "6ae0caf50852a73f69bac39e"
 ALUNO = "6ae0caf54d0d7ddbc83796c7"

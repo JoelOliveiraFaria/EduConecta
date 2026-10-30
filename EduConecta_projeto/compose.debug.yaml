@@ -1,0 +1,26 @@
+# Reabre as portas diretas de cada serviço, para depuração e para os scripts
+# que falam com um serviço sem passar pelo gateway.
+#
+#   docker compose -f compose.yaml -f compose.debug.yaml up -d
+#
+# Em condições normais os serviços só são alcançáveis através do gateway (porta 8080).
+
+services:
+  escolar:
+    ports:
+      - "127.0.0.1:5001:8000"
+  auth:
+    ports:
+      - "127.0.0.1:5002:8000"
+  diario:
+    ports:
+      - "127.0.0.1:5003:8000"
+  comunicados:
+    ports:
+      - "127.0.0.1:5004:8000"
+  assiduidade:
+    ports:
+      - "127.0.0.1:5005:8000"
+  notificacoes:
+    ports:
+      - "127.0.0.1:5006:8000"

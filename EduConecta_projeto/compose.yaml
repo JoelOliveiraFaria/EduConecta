@@ -24,8 +24,6 @@ services:
       MONGO_ESCOLAR_DATABASE: ${MONGO_ESCOLAR_DATABASE:?Falta MONGO_ESCOLAR_DATABASE no .env}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Falta INTERNAL_SERVICE_KEY no .env}
-    ports:
-      - "127.0.0.1:5001:8000"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -49,8 +47,6 @@ services:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_AUTH_DATABASE: ${MONGO_AUTH_DATABASE:?Falta MONGO_AUTH_DATABASE no .env}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY no .env}
-    ports:
-      - "127.0.0.1:5002:8000"
     healthcheck:
       test:
         - CMD
@@ -68,8 +64,6 @@ services:
     environment:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_DIARIO_DATABASE: ${MONGO_DIARIO_DATABASE:?Falta MONGO_DIARIO_DATABASE no .env}
-    ports:
-      - "127.0.0.1:5003:8000"
     depends_on:
       auth:
         condition: service_healthy
@@ -94,8 +88,6 @@ services:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_COMUNICADOS_DATABASE: ${MONGO_COMUNICADOS_DATABASE:?Falta MONGO_COMUNICADOS_DATABASE no .env}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
-    ports:
-      - "127.0.0.1:5004:8000"
     depends_on:
       auth:
         condition: service_healthy
@@ -121,8 +113,6 @@ services:
       MONGO_URI: ${MONGO_URI:?Falta MONGO_URI no .env}
       MONGO_ASSIDUIDADE_DATABASE: ${MONGO_ASSIDUIDADE_DATABASE:?Falta MONGO_ASSIDUIDADE_DATABASE no .env}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
-    ports:
-      - "127.0.0.1:5005:8000"
     depends_on:
       auth:
         condition: service_healthy
@@ -149,8 +139,6 @@ services:
       MONGO_NOTIFICACOES_DATABASE: ${MONGO_NOTIFICACOES_DATABASE:?Falta MONGO_NOTIFICACOES_DATABASE no .env}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?Falta RABBITMQ_USER no .env}:${RABBITMQ_PASS:?Falta RABBITMQ_PASS no .env}@rabbitmq:5672/
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Falta INTERNAL_SERVICE_KEY no .env}
-    ports:
-      - "127.0.0.1:5006:8000"
     depends_on:
       auth:
         condition: service_healthy
@@ -168,3 +156,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  gateway:
+    build:
+      context: ./backend/gateway
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY no .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - auth
+      - escolar
+      - diario
+      - comunicados
+      - assiduidade
+      - notificacoes
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/health', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -6,7 +6,7 @@ from getpass import GetPassWarning
 import teste_diario as apoio
 
 
-COMUNICADOS = "http://127.0.0.1:5004"
+COMUNICADOS = "http://127.0.0.1:8080/api"
 
 TURMA = apoio.TURMA
 ALUNO = apoio.ALUNO
@@ -74,8 +74,8 @@ def principal():
     )
 
     confirmar(
-        ready.get("database") == "connected",
-        "Serviço confirma ligação à base",
+        ready.get("services", {}).get("comunicados") == "ready",
+        "Gateway confirma que o serviço está pronto, com a base ligada",
     )
 
     verificar(

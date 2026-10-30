@@ -1,0 +1,4 @@
+quart>=0.20,<1
+hypercorn>=0.17,<1
+httpx>=0.27,<1
+PyJWT>=2.10,<3
