@@ -64,11 +64,11 @@ A solução segue o padrão de **microserviços** e está alojada na **AWS**:
 | Área | Tecnologia |
 |---|---|
 | Front end | React |
-| Back end | .NET (ASP.NET Core Web API) |
+| Back end | Python FlaskAPI |
 | API Gateway | YARP |
 | Base de dados | MongoDB (MongoDB Atlas) |
 | Mensagens assíncronas | RabbitMQ (MassTransit) |
-| Containers e orquestração | Docker, Kubernetes (k3s) |
+| Containers e orquestração | Docker |
 | Cloud | AWS: EC2, S3, CloudFront, SES, ECR, CloudWatch |
 | Documentação da API | OpenAPI (Swagger) |
 | Testes | Postman |
