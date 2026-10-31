@@ -6,7 +6,7 @@ from getpass import GetPassWarning
 import teste_diario as apoio
 
 
-COMUNICACAO = "http://127.0.0.1:8080/api"
+COMUNICACAO = "http://127.0.0.1:8081/api"
 
 pedido = apoio.pedido
 verificar = apoio.verificar

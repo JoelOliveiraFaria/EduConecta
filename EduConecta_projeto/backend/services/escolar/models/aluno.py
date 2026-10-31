@@ -27,9 +27,14 @@ def listar():
     )
 
 
-def criar(nome, numero_processo):
+def criar(nome, numero_processo, data_nascimento=None, morada=""):
     """Insere um aluno novo; devolve (id gerado, documento inserido)."""
-    aluno = {"nome": nome, "numero_processo": numero_processo}
+    aluno = {
+        "nome": nome,
+        "numero_processo": numero_processo,
+        "data_nascimento": data_nascimento,
+        "morada": morada,
+    }
     resultado = colecao.insert_one(aluno)
     return resultado.inserted_id, aluno
 
@@ -38,16 +43,17 @@ def obter(aluno_id):
     """Devolve um aluno (não eliminado) pelo id, ou None se não existir/estiver eliminado."""
     return colecao.find_one(
         {"_id": ObjectId(aluno_id), **NAO_ELIMINADO},
-        {"nome": 1, "numero_processo": 1, "turma_id": 1},
+        {"nome": 1, "numero_processo": 1, "turma_id": 1, "data_nascimento": 1, "morada": 1},
     )
 
 
 def atualizar(aluno_id, alteracoes):
-    """Aplica um $set parcial (nome e/ou numero_processo) e devolve o documento já atualizado."""
+    """Aplica um $set parcial (nome, numero_processo, data_nascimento e/ou
+    morada) e devolve o documento já atualizado."""
     return colecao.find_one_and_update(
         {"_id": ObjectId(aluno_id), **NAO_ELIMINADO},
         {"$set": alteracoes},
-        projection={"nome": 1, "numero_processo": 1},
+        projection={"nome": 1, "numero_processo": 1, "data_nascimento": 1, "morada": 1},
         return_document=ReturnDocument.AFTER,
         upsert=False,
     )

@@ -7,7 +7,13 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 import models.profissional as modelo_profissional
 from controllers.blueprint import bp
 from utils.auth_client import criar_conta_utilizador
-from utils.validacao import validar_cc, validar_email_superficial, validar_telemovel
+from utils.validacao import (
+    validar_cc,
+    validar_data_iso,
+    validar_email_superficial,
+    validar_morada,
+    validar_telemovel,
+)
 
 PERFIS_PROFISSIONAL = {"docente", "educadora", "auxiliar"}
 
@@ -27,7 +33,7 @@ def criar_profissional():
 
     dados = request.get_json(silent=True)
 
-    campos_permitidos = {"nome", "email", "cc", "telemovel", "perfil"}
+    campos_permitidos = {"nome", "email", "cc", "telemovel", "perfil", "morada", "data_admissao"}
     obrigatorios = {"nome", "email", "cc", "perfil"}
 
     if (
@@ -39,7 +45,7 @@ def criar_profissional():
             "error": "invalid_fields",
             "message": (
                 "Os campos nome, email, cc e perfil são obrigatórios; "
-                "telemovel é opcional. Não são permitidos outros campos."
+                "telemovel, morada e data_admissao são opcionais. Não são permitidos outros campos."
             ),
         }), 400
 
@@ -48,6 +54,8 @@ def criar_profissional():
     cc = dados.get("cc")
     telemovel = dados.get("telemovel", "")
     perfil = dados.get("perfil")
+    morada = dados.get("morada", "")
+    data_admissao = dados.get("data_admissao")
 
     if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
         return jsonify({
@@ -79,6 +87,18 @@ def criar_profissional():
             "message": "O perfil deve ser docente, educadora ou auxiliar.",
         }), 400
 
+    if not validar_morada(morada):
+        return jsonify({
+            "error": "invalid_address",
+            "message": "A morada deve ser texto com até 200 caracteres.",
+        }), 400
+
+    if data_admissao is not None and validar_data_iso(data_admissao) is None:
+        return jsonify({
+            "error": "invalid_admission_date",
+            "message": "A data de admissão deve ter o formato AAAA-MM-DD.",
+        }), 400
+
     conta, erro = criar_conta_utilizador(
         nome.strip(), email.strip(), perfil, request.headers.get("Authorization", "")
     )
@@ -93,6 +113,8 @@ def criar_profissional():
             perfil,
             cc.strip(),
             telemovel.strip(),
+            morada.strip(),
+            data_admissao,
         )
 
     except DuplicateKeyError:
@@ -119,6 +141,8 @@ def criar_profissional():
         "perfil": profissional["perfil"],
         "cc": profissional["cc"],
         "telemovel": profissional["telemovel"],
+        "morada": profissional["morada"],
+        "data_admissao": profissional["data_admissao"],
         "email": conta.get("email"),
         "estado": conta.get("estado"),
         "deve_alterar_password": conta.get("deve_alterar_password"),
@@ -138,6 +162,8 @@ def listar_profissionais():
                 "perfil": documento.get("perfil"),
                 "cc": documento.get("cc", ""),
                 "telemovel": documento.get("telemovel", ""),
+                "morada": documento.get("morada", ""),
+                "data_admissao": documento.get("data_admissao"),
                 "utilizador_id": (
                     str(documento["utilizador_id"])
                     if documento.get("utilizador_id") is not None

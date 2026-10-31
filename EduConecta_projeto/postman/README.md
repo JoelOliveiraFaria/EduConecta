@@ -1,6 +1,6 @@
 # Coleção Postman
 
-Pedidos para todas as rotas da API, através do API Gateway (`http://localhost:8080/api`).
+Pedidos para todas as rotas da API, através do API Gateway (`http://localhost:8081/api`).
 
 | Ficheiro | O que é |
 |---|---|

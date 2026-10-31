@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "EduConecta API",
-    "description": "Pedidos de todas as rotas da API, através do **API Gateway** (`{{baseUrl}}`, por omissão `http://localhost:8080/api`).\n\n**Como usar**\n1. Importe esta coleção e o ambiente `EduConecta - Local`, e escolha o ambiente.\n2. No ambiente, preencha `email` e `password` de uma conta existente.\n3. Arranque o sistema (`docker compose up -d --build`) e corra **Gateway > Estado dos serviços**. Tem de dar `ready`.\n4. Corra **Auth > Autenticação > Login**. O token fica guardado e é usado por todos os outros pedidos (dura 15 minutos: se aparecer `token_expired`, volte a fazer login).\n5. Os pedidos de criação guardam o ID devolvido (`alunoId`, `turmaId`, ...), por isso os pedidos seguintes já os usam. Pode alterar todas as variáveis em *Variables* da coleção.\n\nCada perfil só consegue chamar as rotas que lhe cabem (por exemplo, criar alunos exige uma conta de administrador). Um 403 do serviço significa que a conta não tem esse perfil.\n\nGerada a partir dos `openapi.yaml` dos serviços.",
+    "description": "Pedidos de todas as rotas da API, através do **API Gateway** (`{{baseUrl}}`, por omissão `http://localhost:8081/api`).\n\n**Como usar**\n1. Importe esta coleção e o ambiente `EduConecta - Local`, e escolha o ambiente.\n2. No ambiente, preencha `email` e `password` de uma conta existente.\n3. Arranque o sistema (`docker compose up -d --build`) e corra **Gateway > Estado dos serviços**. Tem de dar `ready`.\n4. Corra **Auth > Autenticação > Login**. O token fica guardado e é usado por todos os outros pedidos (dura 15 minutos: se aparecer `token_expired`, volte a fazer login).\n5. Os pedidos de criação guardam o ID devolvido (`alunoId`, `turmaId`, ...), por isso os pedidos seguintes já os usam. Pode alterar todas as variáveis em *Variables* da coleção.\n\nCada perfil só consegue chamar as rotas que lhe cabem (por exemplo, criar alunos exige uma conta de administrador). Um 403 do serviço significa que a conta não tem esse perfil.\n\nGerada a partir dos `openapi.yaml` dos serviços.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -17,7 +17,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8080/api"
+      "value": "http://localhost:8081/api"
     },
     {
       "key": "email",
@@ -762,7 +762,7 @@
                 "description": "Cria um aluno. **Perfil: admin apenas.** numero_processo é único.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"nome\": \"Ana Teste\",\n  \"numero_processo\": \"2026-001\"\n}",
+                  "raw": "{\n  \"nome\": \"Ana Teste\",\n  \"numero_processo\": \"2026-001\",\n  \"data_nascimento\": \"2019-05-14\",\n  \"morada\": \"Rua das Flores, 10, Lisboa\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -850,7 +850,7 @@
                 "description": "Atualização parcial de nome e/ou numero_processo. **Perfil: admin, ou um profissional (docente/educadora/auxiliar) atribuído à turma atual do aluno** — um profissional de outra turma recebe 403.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"nome\": \"Ana Teste Atualizada\"\n}",
+                  "raw": "{\n  \"nome\": \"Ana Teste Atualizada\",\n  \"morada\": \"Rua Nova, 25, Lisboa\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1090,7 +1090,7 @@
                 "description": "Cria uma turma. **Perfil: admin apenas.** ano_letivo tem de ter o formato \"AAAA/AAAA\" com dois anos consecutivos (ex: \"2025/2026\"). tipo é obrigatório: \"creche\" (aceita diário e faltas) ou \"basico\" (só aceita faltas — o serviço diario recusa turmas deste tipo).",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"nome\": \"Sala Azul\",\n  \"ano_letivo\": \"2025/2026\",\n  \"tipo\": \"creche\"\n}",
+                  "raw": "{\n  \"nome\": \"Sala Azul\",\n  \"ano_letivo\": \"2025/2026\",\n  \"tipo\": \"creche\",\n  \"capacidade\": 15\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1357,7 +1357,7 @@
                 "description": "Cria o registo de encarregado de educação E a sua conta de login (perfil \"encarregado\") num único pedido: o serviço auth gera a conta e envia uma password temporária para o email indicado, tal como já acontece para docentes/educadoras/auxiliares em POST /admin/utilizadores (serviço auth). **Perfil: admin apenas.** PUT /encarregados/{id}/utilizador continua a existir, mas só serve para ligar uma conta já existente — não é preciso para o fluxo normal.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"nome\": \"Maria Teste\",\n  \"email\": \"maria.teste@example.com\",\n  \"cc\": \"12345678\",\n  \"telemovel\": \"910000000\"\n}",
+                  "raw": "{\n  \"nome\": \"Maria Teste\",\n  \"email\": \"maria.teste@example.com\",\n  \"cc\": \"12345678\",\n  \"telemovel\": \"910000000\",\n  \"morada\": \"Rua das Flores, 10, Lisboa\",\n  \"relacao\": \"mae\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1521,7 +1521,7 @@
                 "description": "Cria o registo de profissional (docente, educadora ou auxiliar) E a sua conta de login, num único pedido: o auth cria a conta com o perfil indicado e envia uma password temporária para o email — mesmo fluxo de POST /encarregados. **Perfil: admin apenas.**",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"nome\": \"Joana Docente\",\n  \"email\": \"joana.docente@example.com\",\n  \"cc\": \"87654321\",\n  \"telemovel\": \"920000000\",\n  \"perfil\": \"docente\"\n}",
+                  "raw": "{\n  \"nome\": \"Joana Docente\",\n  \"email\": \"joana.docente@example.com\",\n  \"cc\": \"87654321\",\n  \"telemovel\": \"920000000\",\n  \"perfil\": \"docente\",\n  \"morada\": \"Avenida Central, 5, Coimbra\",\n  \"data_admissao\": \"2024-09-01\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
