@@ -33,17 +33,6 @@ Cada perfil só consegue chamar as rotas que lhe cabem: criar alunos ou turmas e
 
 Os pedidos com ficheiros (justificação de falta, fotografias, vídeo) têm o campo do ficheiro vazio: escolha o ficheiro em *Body > form-data*.
 
-## Executar a coleção sem abrir o Postman
-
-Com o [Newman](https://github.com/postmanlabs/newman):
-
-```bash
-npm install -g newman
-newman run postman/EduConecta.postman_collection.json -e postman/EduConecta.local.postman_environment.json --folder Gateway
-```
-
-A pasta **Gateway** não precisa de login. Correr a coleção toda só faz sentido com contas dos perfis certos, porque os pedidos dependem uns dos outros.
-
 ## Atualizar a coleção
 
 A coleção foi gerada a partir dos `openapi.yaml` dos serviços. Quando uma rota é acrescentada ou alterada, o mais simples é editar o pedido no Postman e exportar a coleção para este ficheiro.
