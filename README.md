@@ -67,7 +67,7 @@ A solução segue o padrão de **microserviços**. O diagrama mostra a arquitetu
 | Aspeto | Hoje | Previsto |
 |---|---|---|
 | Execução | Docker Compose | Kubernetes (k3s em EC2), um container por microserviço |
-| Entrada da API | API Gateway em Python, em `http://localhost:8080/api` | O mesmo, atrás do Amazon CloudFront, que encaminha `/api` para o cluster |
+| Entrada da API | API Gateway em Python, em `http://localhost:8081/api` | O mesmo, atrás do Amazon CloudFront, que encaminha `/api` para o cluster |
 | Front end | Não existe | React servido pelo CloudFront a partir de um bucket S3 |
 | Emails | SMTP, no serviço Auth (palavra-passe temporária) | Amazon SES |
 | Credenciais | Ficheiros `.env` | Kubernetes Secrets |
@@ -91,7 +91,7 @@ O que é comum aos dois:
 | **Comunicados** | Comunicados por turma, com fotografias, e conversas privadas entre encarregados e profissionais |
 | **Notificações** | Consumo de eventos e notificações na plataforma para cada utilizador |
 
-Cada serviço publica a sua documentação em `http://localhost:8080/api/docs`.
+Cada serviço publica a sua documentação em `http://localhost:8081/api/docs`.
 
 ## Eventos
 
@@ -122,31 +122,131 @@ Os serviços publicam no exchange `educonecta.eventos` (tipo topic) do RabbitMQ.
 
 ## Executar localmente
 
-**Pré-requisitos:** Docker com Docker Compose, e acesso ao cluster do MongoDB Atlas.
+Guia passo a passo para correr o back end completo num PC novo (Windows, macOS ou Linux).
 
-1. Na pasta `EduConecta_projeto`, copie `.env.example` para `.env` e preencha-o (URI do Atlas, nomes das bases, palavras-passe e segredos).
-2. Crie o ficheiro `.env.smtp` com `SMTP_USERNAME` e `SMTP_PASSWORD`. Podem ficar vazios, mas sem eles o Auth não envia emails.
-3. No Atlas, em *Network Access*, adicione o IP da sua rede. Se mudar de rede, o IP muda. Algumas redes (como a eduroam) bloqueiam a porta 27017 do Atlas, e nesse caso os serviços não chegam à base de dados.
-4. Arranque tudo:
+### 1. Pré-requisitos
+
+| Ferramenta | Para quê | Como verificar |
+|---|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) (inclui o Docker Compose) | Corre todos os serviços | `docker --version` e `docker compose version` |
+| [Git](https://git-scm.com/downloads) | Obter o código | `git --version` |
+| Credenciais do MongoDB Atlas da equipa | Base de dados (cada serviço usa a sua) | Pedir à equipa |
+
+Abra o Docker Desktop e espere que fique "running" antes de continuar. Os portos `8081`, `5672` e `15672` têm de estar livres.
+
+### 2. Obter o código
+
+```bash
+git clone https://github.com/JoelOliveiraFaria/EduConecta.git
+cd EduConecta
+git checkout MVC
+cd EduConecta_projeto
+```
+
+Todos os comandos seguintes correm dentro de `EduConecta_projeto`.
+
+### 3. Ligar à base de dados (MongoDB Atlas)
+
+O projeto usa o cluster Atlas da equipa. **Não é preciso criar nenhum cluster**, mas é preciso ter as credenciais e autorizar o IP.
+
+1. **Credenciais:** a equipa envia ao docente, em privado (email ou mensagem, nunca no repositório), o ficheiro `.env` já preenchido ou a `MONGO_URI` com o utilizador e a palavra-passe.
+2. **Autorizar o IP:** o Atlas só aceita ligações de IPs autorizados. O docente vê o seu IP público em [whatismyip.com](https://www.whatismyip.com) e envia-o à equipa, que o adiciona em *Network Access > Add IP Address* no Atlas. Se mudar de rede, o IP muda e tem de ser adicionado de novo.
+
+As bases e coleções já existem no cluster; os serviços criam as que faltarem ao arrancar.
+
+> Algumas redes (como a eduroam) bloqueiam a porta 27017 do Atlas. Se os serviços não chegarem à base de dados, experimente outra rede ou o hotspot do telemóvel.
+
+<details>
+<summary>Para a equipa: criar o acesso do docente no Atlas</summary>
+
+1. *Database Access > Add New Database User*: crie um utilizador para o docente, com palavra-passe forte e o papel *Read and write to any database* (ou apenas às bases listadas no `.env.example`).
+2. *Network Access > Add IP Address*: adicione o IP do docente. `0.0.0.0/0` aceita qualquer IP e só deve ser usado temporariamente, para a avaliação.
+3. Em *Connect > Drivers*, copie a connection string, substitua `<password>` e envie-a em privado.
+4. Depois da avaliação, apague o utilizador e o IP.
+
+</details>
+
+### 4. Criar os ficheiros de configuração
+
+**`.env`** (obrigatório). Se a equipa já enviou o `.env` preenchido, copie-o para esta pasta e salte esta parte. Caso contrário, copie o modelo e preencha-o:
+
+```bash
+cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
+```
+
+| Variável | O que pôr |
+|---|---|
+| `MONGO_URI` | A connection string enviada pela equipa (passo 3) |
+| `MONGO_*_DATABASE` | Pode deixar os nomes por omissão |
+| `RABBITMQ_USER`, `RABBITMQ_PASS` | Qualquer utilizador e palavra-passe (servem para o painel do RabbitMQ) |
+| `JWT_SECRET_KEY` | Texto aleatório com **pelo menos 32 caracteres** |
+| `INTERNAL_SERVICE_KEY` | Outro texto aleatório |
+
+Pode gerar um segredo com `openssl rand -hex 32` ou `python -c "import secrets; print(secrets.token_hex(32))"`.
+
+**`.env.smtp`** (obrigatório existir, mas pode ter valores vazios). O Auth usa-o para enviar a palavra-passe temporária por email:
+
+```
+SMTP_USERNAME=
+SMTP_PASSWORD=
+```
+
+Sem credenciais SMTP reais o sistema funciona, mas não envia emails.
+
+### 5. Arrancar
 
 ```bash
 docker compose up -d --build
 ```
 
+A primeira vez demora alguns minutos (construção das imagens). Depois confirme:
+
+```bash
+docker compose ps
+```
+
+Todos os contentores devem aparecer como `healthy` (ou `running`).
+
+### 6. Verificar que funciona
+
 | O quê | Onde |
 |---|---|
-| API (através do gateway) | `http://localhost:8080/api` |
-| Documentação de cada serviço | `http://localhost:8080/api/docs` |
-| Estado de todos os serviços | `http://localhost:8080/api/ready` |
+| API (através do gateway) | `http://localhost:8081/api` |
+| Documentação de cada serviço | `http://localhost:8081/api/docs` |
+| Estado de todos os serviços | `http://localhost:8081/api/ready` (deve devolver `"status": "ready"`) |
 | Painel do RabbitMQ | `http://localhost:15672` (utilizador e palavra-passe do `.env`) |
 
 Se `/api/ready` indicar `not_ready`, falta um serviço ou a ligação ao Atlas. `docker compose ps` e `docker compose logs <serviço>` mostram o motivo.
+
+### 7. Experimentar a API
+
+O caminho mais rápido é a coleção do Postman, que tem um pedido para cada rota. Siga o [README da pasta](EduConecta_projeto/postman/README.md): importar os dois ficheiros, escolher o ambiente `EduConecta - Local` e fazer login. O login precisa de uma conta existente; as contas são criadas por um administrador.
+
+### Comandos úteis
+
+```bash
+docker compose logs -f gateway     # ver os logs de um serviço
+docker compose restart auth        # reiniciar um serviço
+docker compose down                # parar tudo
+docker compose down -v             # parar e apagar volumes
+```
 
 Para falar diretamente com um serviço (depuração), reabra as portas `5001` a `5006`:
 
 ```bash
 docker compose -f compose.yaml -f compose.debug.yaml up -d
 ```
+
+### Problemas comuns
+
+| Sintoma | Causa provável |
+|---|---|
+| `Falta MONGO_URI no .env` (ou outra variável) | O `.env` não existe ou está incompleto |
+| `env file .env.smtp not found` | Falta criar o `.env.smtp` (passo 4) |
+| `cannot connect to the Docker daemon` | O Docker Desktop não está aberto |
+| `port is already allocated` | Outro programa usa o porto 8081, 5672 ou 15672 |
+| Serviços reiniciam sem parar | Atlas inacessível: IP não autorizado, credenciais erradas ou rede a bloquear a porta 27017 |
+| `/api/ready` devolve `not_ready` | Algum serviço ainda está a arrancar ou falhou; veja `docker compose ps` |
 
 ## Testes
 
@@ -159,7 +259,7 @@ pytest
 
 A coleção do Postman em [`EduConecta_projeto/postman`](EduConecta_projeto/postman) tem um pedido para cada rota da API, com variáveis e testes. O [README da pasta](EduConecta_projeto/postman/README.md) explica como a usar.
 
-Os scripts de integração em [`EduConecta_projeto/testes_manuais`](EduConecta_projeto/testes_manuais) correm contra o sistema a funcionar e pedem as credenciais no terminal. Os que usam `127.0.0.1:8080` passam pelo gateway. Os que usam `http://auth:8000` e semelhantes correm dentro dos contentores, na rede interna.
+Os scripts de integração em [`EduConecta_projeto/testes_manuais`](EduConecta_projeto/testes_manuais) correm contra o sistema a funcionar e pedem as credenciais no terminal. Os que usam `127.0.0.1:8081` passam pelo gateway. Os que usam `http://auth:8000` e semelhantes correm dentro dos contentores, na rede interna.
 
 ## Estrutura do repositório
 
