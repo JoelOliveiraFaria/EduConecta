@@ -15,6 +15,7 @@ import models.encarregado as modelo_encarregado
 import models.turma as modelo_turma
 from controllers.blueprint import bp, obter_profissional_da_sessao
 from utils.eventos import publicar
+from utils.validacao import validar_data_nascimento, validar_morada
 
 
 @bp.get("/alunos")
@@ -47,7 +48,8 @@ def listar_alunos():
 
 @bp.post("/alunos")
 def criar_aluno():
-    """Cria um aluno (nome + numero_processo, ambos obrigatórios e únicos por processo)."""
+    """Cria um aluno (nome + numero_processo obrigatórios e únicos por
+    processo; data_nascimento e morada são opcionais)."""
     if not request.is_json:
         return jsonify({
             "error": "unsupported_media_type",
@@ -62,16 +64,21 @@ def criar_aluno():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
-    campos_permitidos = {"nome", "numero_processo"}
+    campos_permitidos = {"nome", "numero_processo", "data_nascimento", "morada"}
 
     if set(dados) - campos_permitidos:
         return jsonify({
             "error": "unknown_fields",
-            "message": "Os campos permitidos são nome e numero_processo.",
+            "message": (
+                "Os campos permitidos são nome, numero_processo "
+                "(obrigatórios), data_nascimento e morada (opcionais)."
+            ),
         }), 400
 
     nome = dados.get("nome")
     numero_processo = dados.get("numero_processo")
+    data_nascimento = dados.get("data_nascimento")
+    morada = dados.get("morada", "")
 
     if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
         return jsonify({
@@ -85,8 +92,22 @@ def criar_aluno():
             "message": "O número de processo deve ser texto com 1 a 50 caracteres.",
         }), 400
 
+    if data_nascimento is not None and not validar_data_nascimento(data_nascimento):
+        return jsonify({
+            "error": "invalid_birth_date",
+            "message": "A data de nascimento deve ter o formato AAAA-MM-DD e não pode ser no futuro.",
+        }), 400
+
+    if not validar_morada(morada):
+        return jsonify({
+            "error": "invalid_address",
+            "message": "A morada deve ser texto com até 200 caracteres.",
+        }), 400
+
     try:
-        inserted_id, aluno = modelo_aluno.criar(nome.strip(), numero_processo.strip())
+        inserted_id, aluno = modelo_aluno.criar(
+            nome.strip(), numero_processo.strip(), data_nascimento, morada.strip()
+        )
 
     except DuplicateKeyError:
         return jsonify({
@@ -104,6 +125,8 @@ def criar_aluno():
         "id": str(inserted_id),
         "nome": aluno["nome"],
         "numero_processo": aluno["numero_processo"],
+        "data_nascimento": aluno["data_nascimento"],
+        "morada": aluno["morada"],
     }), 201
 
 
@@ -135,6 +158,8 @@ def obter_aluno(aluno_id):
         "id": str(aluno["_id"]),
         "nome": aluno.get("nome"),
         "numero_processo": aluno.get("numero_processo"),
+        "data_nascimento": aluno.get("data_nascimento"),
+        "morada": aluno.get("morada", ""),
     }), 200
 
 
@@ -194,12 +219,12 @@ def atualizar_aluno(aluno_id):
             "message": "Envia pelo menos um campo para atualizar.",
         }), 400
 
-    campos_permitidos = {"nome", "numero_processo"}
+    campos_permitidos = {"nome", "numero_processo", "data_nascimento", "morada"}
 
     if set(dados) - campos_permitidos:
         return jsonify({
             "error": "unknown_fields",
-            "message": "Os campos permitidos são nome e numero_processo.",
+            "message": "Os campos permitidos são nome, numero_processo, data_nascimento e morada.",
         }), 400
 
     alteracoes = {}
@@ -226,6 +251,28 @@ def atualizar_aluno(aluno_id):
 
         alteracoes["numero_processo"] = numero_processo.strip()
 
+    if "data_nascimento" in dados:
+        data_nascimento = dados["data_nascimento"]
+
+        if data_nascimento is not None and not validar_data_nascimento(data_nascimento):
+            return jsonify({
+                "error": "invalid_birth_date",
+                "message": "A data de nascimento deve ter o formato AAAA-MM-DD e não pode ser no futuro.",
+            }), 400
+
+        alteracoes["data_nascimento"] = data_nascimento
+
+    if "morada" in dados:
+        morada = dados["morada"]
+
+        if not validar_morada(morada):
+            return jsonify({
+                "error": "invalid_address",
+                "message": "A morada deve ser texto com até 200 caracteres.",
+            }), 400
+
+        alteracoes["morada"] = morada.strip()
+
     try:
         aluno = modelo_aluno.atualizar(aluno_id, alteracoes)
 
@@ -251,6 +298,8 @@ def atualizar_aluno(aluno_id):
         "id": str(aluno["_id"]),
         "nome": aluno.get("nome"),
         "numero_processo": aluno.get("numero_processo"),
+        "data_nascimento": aluno.get("data_nascimento"),
+        "morada": aluno.get("morada", ""),
     }), 200
 
 
@@ -441,6 +490,8 @@ def listar_encarregados_aluno(aluno_id):
                 "nome": documento.get("nome"),
                 "cc": documento.get("cc", ""),
                 "telemovel": documento.get("telemovel", ""),
+                "morada": documento.get("morada", ""),
+                "relacao": documento.get("relacao"),
             }
             for documento in documentos
         ]

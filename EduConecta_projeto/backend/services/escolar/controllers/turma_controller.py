@@ -31,17 +31,21 @@ def criar_turma():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
-    campos_permitidos = {"nome", "ano_letivo", "tipo"}
+    campos_permitidos = {"nome", "ano_letivo", "tipo", "capacidade"}
 
     if set(dados) - campos_permitidos or "tipo" not in dados:
         return jsonify({
             "error": "unknown_fields",
-            "message": "Os campos permitidos são nome, ano_letivo e tipo (obrigatório).",
+            "message": (
+                "Os campos permitidos são nome, ano_letivo e tipo (obrigatórios) "
+                "e capacidade (opcional)."
+            ),
         }), 400
 
     nome = dados.get("nome")
     ano_letivo = dados.get("ano_letivo")
     tipo = dados.get("tipo")
+    capacidade = dados.get("capacidade")
 
     if not isinstance(tipo, str) or tipo not in modelo_turma.TIPOS:
         return jsonify({
@@ -84,8 +88,16 @@ def criar_turma():
             "message": "O ano letivo deve conter dois anos consecutivos.",
         }), 400
 
+    if capacidade is not None and (
+        not isinstance(capacidade, int) or isinstance(capacidade, bool) or not 1 <= capacidade <= 1000
+    ):
+        return jsonify({
+            "error": "invalid_capacity",
+            "message": "A capacidade deve ser um número inteiro entre 1 e 1000.",
+        }), 400
+
     try:
-        inserted_id, turma = modelo_turma.criar(nome.strip(), ano_letivo, tipo)
+        inserted_id, turma = modelo_turma.criar(nome.strip(), ano_letivo, tipo, capacidade)
 
     except DuplicateKeyError:
         return jsonify({
@@ -104,6 +116,7 @@ def criar_turma():
         "nome": turma["nome"],
         "ano_letivo": turma["ano_letivo"],
         "tipo": turma["tipo"],
+        "capacidade": turma["capacidade"],
     }), 201
 
 
@@ -119,6 +132,7 @@ def listar_turmas():
                 "nome": documento.get("nome"),
                 "ano_letivo": documento.get("ano_letivo"),
                 "tipo": documento.get("tipo"),
+                "capacidade": documento.get("capacidade"),
             }
             for documento in documentos
         ]
@@ -189,6 +203,7 @@ def obter_turma(turma_id):
         "nome": turma.get("nome"),
         "ano_letivo": turma.get("ano_letivo"),
         "tipo": turma.get("tipo"),
+        "capacidade": turma.get("capacidade"),
         "profissionais": [
             {
                 "id": str(documento["_id"]),
@@ -243,6 +258,7 @@ def listar_alunos_turma(turma_id):
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
             "tipo": turma.get("tipo"),
+            "capacidade": turma.get("capacidade"),
         },
         "alunos": alunos,
         "quantidade": len(alunos),
@@ -348,6 +364,7 @@ def associar_profissional_turma(turma_id, profissional_id):
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
             "tipo": turma.get("tipo"),
+            "capacidade": turma.get("capacidade"),
         },
         "profissional": {
             "id": str(profissional["_id"]),
@@ -374,6 +391,7 @@ def listar_minhas_turmas():
                 "nome": documento.get("nome"),
                 "ano_letivo": documento.get("ano_letivo"),
                 "tipo": documento.get("tipo"),
+                "capacidade": documento.get("capacidade"),
             }
             for documento in documentos
         ]
@@ -447,6 +465,7 @@ def listar_alunos_minha_turma(turma_id):
             "nome": turma.get("nome"),
             "ano_letivo": turma.get("ano_letivo"),
             "tipo": turma.get("tipo"),
+            "capacidade": turma.get("capacidade"),
         },
         "alunos": alunos,
         "quantidade": len(alunos),

@@ -12,6 +12,7 @@ Documento para aprovação antes de começar a implementar (mesmo formato das Fa
 > - A página Swagger é servida pelo próprio gateway (`/api/docs/{servico}`), porque as páginas dos serviços pedem `/openapi.yaml` na raiz e deixariam de funcionar atrás do prefixo `/api`.
 > - Há um `GET /api/ready` que pergunta o `/ready` a cada serviço (inclui a base de dados) e que os scripts de `testes_manuais/` usam no lugar do `/ready` de cada serviço.
 > - Os scripts de `testes_manuais/` que correm dentro dos contentores (`http://auth:8000`, etc.) não foram alterados: falam com os serviços pela rede interna, sem gateway.
+> - **Porta local do gateway: `8081`, não `8080`.** Num dos postos de desenvolvimento, a porta `8080` já estava ocupada por um serviço do Windows alheio ao projeto (`AgentService`); `compose.yaml` expõe o gateway em `127.0.0.1:8081:8080` (o container continua a ouvir em `8080` por dentro — só o mapeamento do host muda). `testes_manuais/` e a coleção Postman foram atualizados para `8081`. Se a porta `8080` estiver livre na tua máquina, podes repor o mapeamento original em `compose.yaml` e ajustar os mesmos ficheiros de volta.
 
 ---
 

@@ -86,9 +86,12 @@ def test_criar_encarregado_sucesso_cria_conta(client, autenticar, monkeypatch):
     monkeypatch.setattr(
         modelo_encarregado,
         "criar",
-        lambda nome, cc, telemovel, utilizador_id: (
+        lambda nome, cc, telemovel, utilizador_id, morada="", relacao=None: (
             encarregado_id,
-            {"nome": nome, "cc": cc, "telemovel": telemovel, "utilizador_id": utilizador_id},
+            {
+                "nome": nome, "cc": cc, "telemovel": telemovel, "utilizador_id": utilizador_id,
+                "morada": morada, "relacao": relacao,
+            },
         ),
     )
 
@@ -133,9 +136,12 @@ def test_criar_encarregado_sem_telemovel_opcional(client, autenticar, monkeypatc
     monkeypatch.setattr(
         modelo_encarregado,
         "criar",
-        lambda nome, cc, telemovel, utilizador_id: (
+        lambda nome, cc, telemovel, utilizador_id, morada="", relacao=None: (
             ObjectId(),
-            {"nome": nome, "cc": cc, "telemovel": telemovel, "utilizador_id": utilizador_id},
+            {
+                "nome": nome, "cc": cc, "telemovel": telemovel, "utilizador_id": utilizador_id,
+                "morada": morada, "relacao": relacao,
+            },
         ),
     )
 

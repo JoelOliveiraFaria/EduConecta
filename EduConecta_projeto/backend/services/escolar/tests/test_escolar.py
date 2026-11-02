@@ -98,7 +98,13 @@ def test_criar_aluno_sucesso(client, autenticar, monkeypatch):
     monkeypatch.setattr(
         modelo_aluno,
         "criar",
-        lambda nome, numero_processo: (novo_id, {"nome": nome, "numero_processo": numero_processo}),
+        lambda nome, numero_processo, data_nascimento=None, morada="": (
+            novo_id,
+            {
+                "nome": nome, "numero_processo": numero_processo,
+                "data_nascimento": data_nascimento, "morada": morada,
+            },
+        ),
     )
 
     resposta = client.post(

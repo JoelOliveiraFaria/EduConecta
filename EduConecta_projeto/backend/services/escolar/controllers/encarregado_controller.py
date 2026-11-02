@@ -7,7 +7,14 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 import models.encarregado as modelo_encarregado
 from controllers.blueprint import bp
 from utils.auth_client import criar_conta_utilizador, obter_conta_para_associacao
-from utils.validacao import validar_cc, validar_email_superficial, validar_telemovel
+from utils.validacao import (
+    validar_cc,
+    validar_email_superficial,
+    validar_morada,
+    validar_telemovel,
+)
+
+RELACOES = {"mae", "pai", "tutor", "outro"}
 
 
 @bp.post("/encarregados")
@@ -33,7 +40,7 @@ def criar_encarregado():
             "message": "O corpo do pedido deve ser um objeto JSON válido.",
         }), 400
 
-    campos_permitidos = {"nome", "email", "cc", "telemovel"}
+    campos_permitidos = {"nome", "email", "cc", "telemovel", "morada", "relacao"}
     obrigatorios = {"nome", "email", "cc"}
 
     if set(dados) - campos_permitidos or obrigatorios - set(dados):
@@ -41,7 +48,7 @@ def criar_encarregado():
             "error": "invalid_fields",
             "message": (
                 "Os campos nome, email e cc são obrigatórios; "
-                "telemovel é opcional. Não são permitidos outros campos."
+                "telemovel, morada e relacao são opcionais. Não são permitidos outros campos."
             ),
         }), 400
 
@@ -49,6 +56,8 @@ def criar_encarregado():
     email = dados.get("email")
     cc = dados.get("cc")
     telemovel = dados.get("telemovel", "")
+    morada = dados.get("morada", "")
+    relacao = dados.get("relacao")
 
     if not isinstance(nome, str) or not 2 <= len(nome.strip()) <= 150:
         return jsonify({
@@ -74,6 +83,18 @@ def criar_encarregado():
             "message": "Indica um email válido.",
         }), 400
 
+    if not validar_morada(morada):
+        return jsonify({
+            "error": "invalid_address",
+            "message": "A morada deve ser texto com até 200 caracteres.",
+        }), 400
+
+    if relacao is not None and relacao not in RELACOES:
+        return jsonify({
+            "error": "invalid_relation",
+            "message": "A relacao deve ser mae, pai, tutor ou outro.",
+        }), 400
+
     conta, erro = criar_conta_utilizador(
         nome.strip(), email.strip(), "encarregado", request.headers.get("Authorization", "")
     )
@@ -83,7 +104,8 @@ def criar_encarregado():
 
     try:
         inserted_id, encarregado = modelo_encarregado.criar(
-            nome.strip(), cc.strip(), telemovel.strip(), ObjectId(conta["id"])
+            nome.strip(), cc.strip(), telemovel.strip(), ObjectId(conta["id"]),
+            morada.strip(), relacao,
         )
 
     except PyMongoError:
@@ -102,6 +124,8 @@ def criar_encarregado():
         "nome": encarregado["nome"],
         "cc": encarregado["cc"],
         "telemovel": encarregado["telemovel"],
+        "morada": encarregado["morada"],
+        "relacao": encarregado["relacao"],
         "utilizador_id": str(encarregado["utilizador_id"]),
         "email": conta.get("email"),
         "estado": conta.get("estado"),
@@ -121,6 +145,8 @@ def listar_encarregados():
                 "nome": documento.get("nome"),
                 "cc": documento.get("cc", ""),
                 "telemovel": documento.get("telemovel", ""),
+                "morada": documento.get("morada", ""),
+                "relacao": documento.get("relacao"),
             }
             for documento in documentos
         ]

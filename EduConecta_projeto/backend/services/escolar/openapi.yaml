@@ -36,6 +36,12 @@ components:
         id: { type: string }
         nome: { type: string }
         numero_processo: { type: string }
+        data_nascimento:
+          type: string
+          format: date
+          nullable: true
+          description: "Formato AAAA-MM-DD; opcional, não pode ser no futuro."
+        morada: { type: string, description: "Opcional, até 200 caracteres." }
 
     AlunoComTurma:
       allOf:
@@ -56,6 +62,10 @@ components:
           type: string
           enum: [creche, basico]
           description: "creche aceita diário e faltas; basico só aceita faltas."
+        capacidade:
+          type: integer
+          nullable: true
+          description: "Opcional, entre 1 e 1000. Só informativo — não há limite imposto ao associar alunos."
 
     Encarregado:
       type: object
@@ -64,6 +74,12 @@ components:
         nome: { type: string }
         cc: { type: string, description: "Número do cartão de cidadão." }
         telemovel: { type: string }
+        morada: { type: string, description: "Opcional, até 200 caracteres." }
+        relacao:
+          type: string
+          nullable: true
+          enum: [mae, pai, tutor, outro]
+          description: "Relação do encarregado com o(s) seu(s) educando(s); opcional."
 
     Profissional:
       type: object
@@ -74,6 +90,12 @@ components:
         cc: { type: string, description: "Número do cartão de cidadão." }
         telemovel: { type: string }
         utilizador_id: { type: string, nullable: true }
+        morada: { type: string, description: "Opcional, até 200 caracteres." }
+        data_admissao:
+          type: string
+          format: date
+          nullable: true
+          description: "Formato AAAA-MM-DD; opcional."
 
   responses:
     NaoAutenticado:
@@ -170,7 +192,9 @@ paths:
         "503": { $ref: '#/components/responses/ServicoIndisponivel' }
     post:
       summary: Criar aluno
-      description: "Cria um aluno. **Perfil: admin apenas.** numero_processo é único."
+      description: >-
+        Cria um aluno. **Perfil: admin apenas.** numero_processo é único.
+        data_nascimento e morada são opcionais.
       tags: [alunos]
       requestBody:
         required: true
@@ -182,6 +206,8 @@ paths:
               properties:
                 nome: { type: string, minLength: 2, maxLength: 150 }
                 numero_processo: { type: string, minLength: 1, maxLength: 50 }
+                data_nascimento: { type: string, format: date, description: "Formato AAAA-MM-DD; opcional, não pode ser no futuro." }
+                morada: { type: string, maxLength: 200, description: "Opcional." }
       responses:
         "201":
           description: Aluno criado.
@@ -231,9 +257,10 @@ paths:
     patch:
       summary: Atualizar aluno
       description: >-
-        Atualização parcial de nome e/ou numero_processo. **Perfil: admin, ou
-        um profissional (docente/educadora/auxiliar) atribuído à turma atual
-        do aluno** — um profissional de outra turma recebe 403.
+        Atualização parcial de nome, numero_processo, data_nascimento e/ou
+        morada. **Perfil: admin, ou um profissional (docente/educadora/
+        auxiliar) atribuído à turma atual do aluno** — um profissional de
+        outra turma recebe 403.
       tags: [alunos]
       requestBody:
         required: true
@@ -245,6 +272,8 @@ paths:
               properties:
                 nome: { type: string }
                 numero_processo: { type: string }
+                data_nascimento: { type: string, format: date, nullable: true }
+                morada: { type: string, maxLength: 200 }
       responses:
         "200":
           description: Aluno atualizado.
@@ -448,6 +477,8 @@ paths:
         formato "AAAA/AAAA" com dois anos consecutivos (ex: "2025/2026").
         tipo é obrigatório: "creche" (aceita diário e faltas) ou "basico"
         (só aceita faltas — o serviço diario recusa turmas deste tipo).
+        capacidade é opcional e só informativa (1 a 1000) — não há limite
+        imposto ao associar alunos à turma.
       tags: [turmas]
       requestBody:
         required: true
@@ -460,6 +491,7 @@ paths:
                 nome: { type: string, minLength: 1, maxLength: 100 }
                 ano_letivo: { type: string, example: "2025/2026" }
                 tipo: { type: string, enum: [creche, basico] }
+                capacidade: { type: integer, minimum: 1, maximum: 1000 }
       responses:
         "201":
           description: Turma criada.
@@ -703,6 +735,7 @@ paths:
         POST /admin/utilizadores (serviço auth). **Perfil: admin apenas.**
         PUT /encarregados/{id}/utilizador continua a existir, mas só serve
         para ligar uma conta já existente — não é preciso para o fluxo normal.
+        telemovel, morada e relacao são opcionais.
       tags: [encarregados]
       requestBody:
         required: true
@@ -716,6 +749,8 @@ paths:
                 email: { type: string, format: email }
                 cc: { type: string, minLength: 5, maxLength: 30, description: "Número do cartão de cidadão." }
                 telemovel: { type: string, maxLength: 30 }
+                morada: { type: string, maxLength: 200 }
+                relacao: { type: string, enum: [mae, pai, tutor, outro] }
       responses:
         "201":
           description: Encarregado e conta de login criados; email com a password temporária enviado.
@@ -863,6 +898,7 @@ paths:
         sua conta de login, num único pedido: o auth cria a conta com o
         perfil indicado e envia uma password temporária para o email —
         mesmo fluxo de POST /encarregados. **Perfil: admin apenas.**
+        telemovel, morada e data_admissao são opcionais.
       tags: [profissionais]
       requestBody:
         required: true
@@ -877,6 +913,8 @@ paths:
                 cc: { type: string, minLength: 5, maxLength: 30, description: "Número do cartão de cidadão." }
                 telemovel: { type: string, maxLength: 30 }
                 perfil: { type: string, enum: [docente, educadora, auxiliar] }
+                morada: { type: string, maxLength: 200 }
+                data_admissao: { type: string, format: date }
       responses:
         "201":
           description: Profissional e conta de login criados; email com a password temporária enviado.

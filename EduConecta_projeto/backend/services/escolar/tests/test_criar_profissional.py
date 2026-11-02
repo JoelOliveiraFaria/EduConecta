@@ -80,7 +80,7 @@ def test_criar_profissional_sucesso_cria_conta(client, autenticar, monkeypatch):
     monkeypatch.setattr(
         modelo_profissional,
         "criar",
-        lambda utilizador_id, nome, perfil, cc, telemovel: (
+        lambda utilizador_id, nome, perfil, cc, telemovel, morada="", data_admissao=None: (
             profissional_id,
             {
                 "utilizador_id": utilizador_id,
@@ -88,6 +88,8 @@ def test_criar_profissional_sucesso_cria_conta(client, autenticar, monkeypatch):
                 "perfil": perfil,
                 "cc": cc,
                 "telemovel": telemovel,
+                "morada": morada,
+                "data_admissao": data_admissao,
             },
         ),
     )

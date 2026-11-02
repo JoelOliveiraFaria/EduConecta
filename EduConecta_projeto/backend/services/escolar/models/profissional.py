@@ -7,7 +7,7 @@ from db import database
 colecao = database["profissionais"]
 
 
-def criar(utilizador_id, nome, perfil, cc, telemovel):
+def criar(utilizador_id, nome, perfil, cc, telemovel, morada="", data_admissao=None):
     """Insere um profissional novo, já ligado à conta de utilizador criada no auth."""
     profissional = {
         "utilizador_id": utilizador_id,
@@ -15,6 +15,8 @@ def criar(utilizador_id, nome, perfil, cc, telemovel):
         "perfil": perfil,
         "cc": cc,
         "telemovel": telemovel,
+        "morada": morada,
+        "data_admissao": data_admissao,
     }
     resultado = colecao.insert_one(profissional)
     return resultado.inserted_id, profissional
@@ -24,7 +26,13 @@ def listar():
     """Até 50 profissionais, por nome."""
     return (
         colecao
-        .find({}, {"nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1})
+        .find(
+            {},
+            {
+                "nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1,
+                "morada": 1, "data_admissao": 1,
+            },
+        )
         .sort([("nome", 1), ("_id", 1)])
         .limit(50)
     )
@@ -34,7 +42,10 @@ def obter(profissional_id):
     """Devolve um profissional pelo id, ou None se não existir."""
     return colecao.find_one(
         {"_id": ObjectId(profissional_id)},
-        {"nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1},
+        {
+            "nome": 1, "perfil": 1, "utilizador_id": 1, "cc": 1, "telemovel": 1,
+            "morada": 1, "data_admissao": 1,
+        },
     )
 
 

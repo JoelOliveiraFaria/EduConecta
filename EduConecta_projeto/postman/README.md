@@ -1,6 +1,6 @@
 # Coleção Postman
 
-Pedidos para todas as rotas da API, através do API Gateway (`http://localhost:8080/api`).
+Pedidos para todas as rotas da API, através do API Gateway (`http://localhost:8081/api`).
 
 | Ficheiro | O que é |
 |---|---|
@@ -32,17 +32,6 @@ Os pedidos de criação (aluno, turma, comunicado, conversa, ...) guardam o ID d
 Cada perfil só consegue chamar as rotas que lhe cabem: criar alunos ou turmas exige uma conta de administrador, marcar faltas exige docente ou educador, e assim por diante. Um 403 vindo do serviço significa que a conta não tem esse perfil.
 
 Os pedidos com ficheiros (justificação de falta, fotografias, vídeo) têm o campo do ficheiro vazio: escolha o ficheiro em *Body > form-data*.
-
-## Executar a coleção sem abrir o Postman
-
-Com o [Newman](https://github.com/postmanlabs/newman):
-
-```bash
-npm install -g newman
-newman run postman/EduConecta.postman_collection.json -e postman/EduConecta.local.postman_environment.json --folder Gateway
-```
-
-A pasta **Gateway** não precisa de login. Correr a coleção toda só faz sentido com contas dos perfis certos, porque os pedidos dependem uns dos outros.
 
 ## Atualizar a coleção
 
